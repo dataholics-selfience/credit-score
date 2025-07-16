@@ -8,11 +8,66 @@ import {
   AlertCircle,
   Loader2,
   FileText,
-  DollarSign
+  DollarSign,
+  Building2
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addDoc, collection, doc, getDoc, setDoc } from 'firebase/firestore';
+
+// Lista de setores empresariais
+const BUSINESS_SECTORS = [
+  'Construtora',
+  'Incorporadora',
+  'Loja de Materiais de Construção',
+  'Imobiliária',
+  'Arquitetura e Urbanismo',
+  'Engenharia Civil',
+  'Decoração e Design de Interiores',
+  'Tecnologia da Informação',
+  'Desenvolvimento de Software',
+  'E-commerce',
+  'Marketing Digital',
+  'Consultoria Empresarial',
+  'Contabilidade',
+  'Advocacia',
+  'Medicina e Saúde',
+  'Odontologia',
+  'Farmácia e Drogaria',
+  'Educação e Ensino',
+  'Alimentação e Restaurantes',
+  'Supermercado e Varejo',
+  'Moda e Vestuário',
+  'Beleza e Estética',
+  'Academia e Fitness',
+  'Turismo e Hotelaria',
+  'Transporte e Logística',
+  'Automobilística',
+  'Metalurgia e Siderurgia',
+  'Química e Petroquímica',
+  'Agricultura e Agronegócio',
+  'Pecuária',
+  'Indústria Alimentícia',
+  'Indústria Têxtil',
+  'Indústria Farmacêutica',
+  'Energia e Utilities',
+  'Telecomunicações',
+  'Mídia e Comunicação',
+  'Publicidade e Propaganda',
+  'Seguros',
+  'Bancos e Financeiras',
+  'Investimentos',
+  'Corretora de Valores',
+  'Recursos Humanos',
+  'Segurança Privada',
+  'Limpeza e Conservação',
+  'Manutenção Predial',
+  'Jardinagem e Paisagismo',
+  'Pet Shop e Veterinária',
+  'Joalheria e Relojoaria',
+  'Livraria e Papelaria',
+  'Outros'
+];
 
 // Função para gerar sessionId alfanumérico de 24 caracteres
 const generateSessionId = (): string => {
@@ -53,6 +108,9 @@ const CreditScore = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     cnpj: '',
+    nomeEmpresa: '',
+    setorEmpresa: '',
+    setorOutros: '',
     valorCredito: ''
   });
   const [files, setFiles] = useState<File[]>([]);
@@ -60,7 +118,7 @@ const CreditScore = () => {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -124,8 +182,13 @@ const CreditScore = () => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.cnpj || !formData.valorCredito) {
-      setError('Por favor, preencha o CNPJ e o valor do crédito');
+    if (!formData.cnpj || !formData.nomeEmpresa || !formData.setorEmpresa || !formData.valorCredito) {
+      setError('Por favor, preencha todos os campos obrigatórios');
+      return;
+    }
+
+    if (formData.setorEmpresa === 'Outros' && !formData.setorOutros.trim()) {
+      setError('Por favor, especifique o setor da empresa');
       return;
     }
 
@@ -157,11 +220,16 @@ const CreditScore = () => {
         );
       }
 
+      // Determinar setor final
+      const setorFinal = formData.setorEmpresa === 'Outros' ? formData.setorOutros.trim() : formData.setorEmpresa;
+
       // Save to Firestore
       const docRef = await addDoc(collection(db, 'creditScore'), {
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
         cnpj: formData.cnpj,
+        nomeEmpresa: formData.nomeEmpresa.trim(),
+        setorEmpresa: setorFinal,
         valorCredito: formData.valorCredito,
         files: fileUrls,
         uploadedAt: new Date().toISOString(),
@@ -176,6 +244,8 @@ const CreditScore = () => {
         service: 'credit-score',
         sessionId: sessionId,
         cnpj: formData.cnpj,
+        nomeEmpresa: formData.nomeEmpresa.trim(),
+        setorEmpresa: setorFinal,
         valorCredito: formData.valorCredito,
         files: fileUrls,
         timestamp: new Date().toISOString()
@@ -249,27 +319,82 @@ const CreditScore = () => {
                 Análise de Credit Score PJ
               </h2>
               <p className="text-blue-100 text-lg">
-                Preencha os dados obrigatórios e opcionalmente faça upload dos demonstrativos financeiros
+                Preencha os dados da empresa e opcionalmente faça upload dos demonstrativos financeiros
               </p>
             </div>
 
             {/* Form Fields */}
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
-              <div>
-                <label className="block text-white font-semibold mb-2">
-                  CNPJ da Empresa *
-                </label>
-                <input
-                  type="text"
-                  name="cnpj"
-                  value={formData.cnpj}
-                  onChange={handleCNPJChange}
-                  placeholder="00.000.000/0000-00"
-                  maxLength={18}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
+            <div className="space-y-6 mb-8">
+              {/* CNPJ e Nome da Empresa */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-white font-semibold mb-2">
+                    CNPJ da Empresa *
+                  </label>
+                  <input
+                    type="text"
+                    name="cnpj"
+                    value={formData.cnpj}
+                    onChange={handleCNPJChange}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white font-semibold mb-2">
+                    Nome da Empresa *
+                  </label>
+                  <input
+                    type="text"
+                    name="nomeEmpresa"
+                    value={formData.nomeEmpresa}
+                    onChange={handleInputChange}
+                    placeholder="Razão social ou nome fantasia"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
               </div>
 
+              {/* Setor da Empresa */}
+              <div>
+                <label className="block text-white font-semibold mb-2">
+                  Setor da Empresa *
+                </label>
+                <select
+                  name="setorEmpresa"
+                  value={formData.setorEmpresa}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="" className="bg-gray-800">Selecione o setor</option>
+                  {BUSINESS_SECTORS.map((sector) => (
+                    <option key={sector} value={sector} className="bg-gray-800">
+                      {sector}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Campo "Outros" - aparece apenas quando "Outros" é selecionado */}
+              {formData.setorEmpresa === 'Outros' && (
+                <div>
+                  <label className="block text-white font-semibold mb-2">
+                    Especifique o Setor *
+                  </label>
+                  <input
+                    type="text"
+                    name="setorOutros"
+                    value={formData.setorOutros}
+                    onChange={handleInputChange}
+                    placeholder="Descreva o setor da sua empresa"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              )}
+
+              {/* Valor do Crédito */}
               <div>
                 <label className="block text-white font-semibold mb-2">
                   Valor do Crédito *
@@ -356,9 +481,9 @@ const CreditScore = () => {
             <div className="text-center">
               <button
                 onClick={handleSubmit}
-                disabled={!formData.cnpj || !formData.valorCredito || uploading}
+                disabled={!formData.cnpj || !formData.nomeEmpresa || !formData.setorEmpresa || !formData.valorCredito || uploading || (formData.setorEmpresa === 'Outros' && !formData.setorOutros.trim())}
                 className={`px-8 py-4 rounded-lg text-lg font-semibold transition-all ${
-                  !formData.cnpj || !formData.valorCredito || uploading
+                  !formData.cnpj || !formData.nomeEmpresa || !formData.setorEmpresa || !formData.valorCredito || uploading || (formData.setorEmpresa === 'Outros' && !formData.setorOutros.trim())
                     ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                     : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl'
                 }`}
@@ -377,11 +502,11 @@ const CreditScore = () => {
             {/* Info Box */}
             <div className="mt-8 bg-blue-900/30 border border-blue-600 rounded-lg p-4">
               <h4 className="text-blue-200 font-medium mb-2 flex items-center gap-2">
-                <DollarSign size={16} />
+                <Building2 size={16} />
                 Como funciona
               </h4>
               <ul className="text-blue-100 text-sm space-y-1">
-                <li>• CNPJ e valor do crédito são obrigatórios para a análise</li>
+                <li>• CNPJ, nome da empresa, setor e valor do crédito são obrigatórios</li>
                 <li>• Demonstrativos financeiros são opcionais mas podem melhorar a precisão</li>
                 <li>• A análise considera dados públicos e informações fornecidas</li>
                 <li>• Resultado inclui score, taxa de juros e opções de pagamento</li>
@@ -396,6 +521,29 @@ const CreditScore = () => {
               <h2 className="text-3xl font-bold text-white mb-4">
                 Análise Concluída
               </h2>
+              <div className="bg-white/5 rounded-lg p-4 mb-6">
+                <h3 className="text-lg font-bold text-white mb-2">Dados da Empresa</h3>
+                <div className="grid md:grid-cols-2 gap-4 text-left">
+                  <div>
+                    <span className="text-gray-400">CNPJ:</span>
+                    <span className="text-white ml-2">{formData.cnpj}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Empresa:</span>
+                    <span className="text-white ml-2">{formData.nomeEmpresa}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Setor:</span>
+                    <span className="text-white ml-2">
+                      {formData.setorEmpresa === 'Outros' ? formData.setorOutros : formData.setorEmpresa}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Valor Solicitado:</span>
+                    <span className="text-white ml-2">{formData.valorCredito}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-6 mb-8">
@@ -459,7 +607,13 @@ const CreditScore = () => {
             <div className="text-center">
               <button
                 onClick={() => {
-                  setFormData({ cnpj: '', valorCredito: '' });
+                  setFormData({ 
+                    cnpj: '', 
+                    nomeEmpresa: '', 
+                    setorEmpresa: '', 
+                    setorOutros: '', 
+                    valorCredito: '' 
+                  });
                   setFiles([]);
                   setResult(null);
                   setError('');
