@@ -14,7 +14,11 @@ import {
   MapPin,
   User,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  AlertTriangle,
+  ThumbsUp,
+  Info,
+  Download
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -207,52 +211,442 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
   );
 };
 
-// Componente para exibir indicadores
-const IndicatorCard = ({ 
-  title, 
-  icon: Icon, 
-  data, 
-  color = "blue" 
+// Componente de Barra de Progresso
+const ProgressBar = ({ 
+  value, 
+  max, 
+  label, 
+  color = 'blue',
+  showPercentage = true 
 }: { 
-  title: string; 
-  icon: any; 
-  data: Record<string, any>; 
+  value: number; 
+  max: number; 
+  label: string; 
   color?: string;
+  showPercentage?: boolean;
 }) => {
-  const colorClasses = {
-    blue: 'bg-blue-900/30 border-blue-600',
-    green: 'bg-green-900/30 border-green-600',
-    purple: 'bg-purple-900/30 border-purple-600',
-    orange: 'bg-orange-900/30 border-orange-600'
-  };
-
-  const iconColors = {
-    blue: 'text-blue-400',
-    green: 'text-green-400',
-    purple: 'text-purple-400',
-    orange: 'text-orange-400'
+  const percentage = Math.min((value / max) * 100, 100);
+  
+  const getColorClasses = (color: string) => {
+    switch (color) {
+      case 'green': return 'bg-green-500';
+      case 'yellow': return 'bg-yellow-500';
+      case 'orange': return 'bg-orange-500';
+      case 'red': return 'bg-red-500';
+      default: return 'bg-blue-500';
+    }
   };
 
   return (
-    <div className={`${colorClasses[color as keyof typeof colorClasses]} border rounded-lg p-6`}>
-      <div className="flex items-center gap-3 mb-4">
-        <Icon className={`${iconColors[color as keyof typeof iconColors]}`} size={24} />
-        <h3 className="text-lg font-bold text-white">{title}</h3>
+    <div className="mb-4">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-sm font-medium text-gray-300">{label}</span>
+        {showPercentage && (
+          <span className="text-sm text-gray-400">{percentage.toFixed(1)}%</span>
+        )}
       </div>
-      
-      <div className="space-y-3">
-        {Object.entries(data).map(([key, value]) => {
-          if (value === null || value === undefined || value === '') return null;
-          
-          const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          
-          return (
-            <div key={key} className="flex justify-between items-center">
-              <span className="text-gray-300 text-sm">{label}:</span>
-              <span className="text-white font-medium text-sm">{value}</span>
+      <div className="w-full bg-gray-700 rounded-full h-3">
+        <div 
+          className={`h-3 rounded-full transition-all duration-1000 ${getColorClasses(color)}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+// Componente do Relatório Profissional
+const ProfessionalCreditReport = ({ result }: { result: any }) => {
+  const formatCurrency = (value: string) => {
+    if (!value) return 'N/A';
+    return value;
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR');
+  };
+
+  const parsePercentage = (percentStr: string): number => {
+    if (!percentStr) return 0;
+    return parseFloat(percentStr.replace('%', ''));
+  };
+
+  const parseCurrency = (currencyStr: string): number => {
+    if (!currencyStr) return 0;
+    return parseFloat(currencyStr.replace(/[R$\s.,]/g, '').replace(',', '.')) || 0;
+  };
+
+  // Calcular valores para análise
+  const valorSolicitado = 1000000; // R$ 1.000.000 (exemplo)
+  const entradaPercentual = parsePercentage(result.entrada_sugerida || '20%');
+  const valorEntrada = valorSolicitado * (entradaPercentual / 100);
+  const valorFinanciado = valorSolicitado - valorEntrada;
+  const numeroParcelas = result.numero_parcelas || 6;
+  const valorParcela = parseCurrency(result.valor_parcela || 'R$ 133.333,33');
+  const valorTotalPago = valorEntrada + (valorParcela * numeroParcelas);
+  const jurosMensal = parsePercentage(result.juros_mensal || '1.5%');
+
+  // Indicadores de risco
+  const parcelaLucroPercentual = parsePercentage(result.indicadores_financeiros?.percentual_parcela_sobre_lucro || '0%');
+  const dividaReceitaPercentual = parsePercentage(result.indicadores_financeiros?.percentual_divida_sobre_receita || '0%');
+
+  const getRiskLevel = (percentage: number) => {
+    if (percentage > 100) return { level: 'Alto', color: 'text-red-400', bgColor: 'bg-red-900/30', borderColor: 'border-red-600' };
+    if (percentage > 70) return { level: 'Médio', color: 'text-yellow-400', bgColor: 'bg-yellow-900/30', borderColor: 'border-yellow-600' };
+    return { level: 'Baixo', color: 'text-green-400', bgColor: 'bg-green-900/30', borderColor: 'border-green-600' };
+  };
+
+  const parcelaRisk = getRiskLevel(parcelaLucroPercentual);
+  const dividaRisk = getRiskLevel(dividaReceitaPercentual);
+
+  return (
+    <div className="space-y-8 max-w-6xl mx-auto">
+      {/* Header com Gauge e Informações da Empresa */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+          {/* Gauge Score */}
+          <div className="flex justify-center">
+            <AnimatedGauge 
+              score={result.score || 76} 
+              classification={result.classificacao || 'Bom'} 
+            />
+          </div>
+
+          {/* Informações da Empresa */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="border-b border-gray-600 pb-4">
+              <h1 className="text-3xl font-bold text-white mb-2">
+                {result.indicadores_cadastrais?.razao_social || 'Empresa'}
+              </h1>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-300">
+                <div className="flex items-center gap-2">
+                  <Building2 size={16} className="text-blue-400" />
+                  <span className="text-sm">CNPJ: {result.indicadores_cadastrais?.cnpj || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <BarChart3 size={16} className="text-purple-400" />
+                  <span className="text-sm">Porte: {result.indicadores_cadastrais?.porte || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin size={16} className="text-green-400" />
+                  <span className="text-sm">
+                    {result.indicadores_cadastrais?.municipio || 'N/A'}/{result.indicadores_cadastrais?.estado || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar size={16} className="text-yellow-400" />
+                  <span className="text-sm">
+                    Abertura: {formatDate(result.indicadores_cadastrais?.data_abertura)}
+                  </span>
+                </div>
+              </div>
             </div>
-          );
-        })}
+            
+            {/* Status da Empresa */}
+            <div className="flex items-center gap-4">
+              <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                result.indicadores_cadastrais?.situacao_cadastral === 'ATIVA' 
+                  ? 'bg-green-900/30 text-green-300 border border-green-600' 
+                  : 'bg-red-900/30 text-red-300 border border-red-600'
+              }`}>
+                {result.indicadores_cadastrais?.situacao_cadastral || 'N/A'}
+              </div>
+              <span className="text-gray-400 text-sm">
+                Capital Social: {formatCurrency(result.indicadores_cadastrais?.capital_social)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Condições de Crédito - Destaque Principal */}
+      <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-2xl p-8 border-2 border-blue-500/50">
+        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <DollarSign className="text-green-400" size={28} />
+          Condições de Crédito Sugeridas
+        </h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Valores Principais */}
+          <div className="space-y-6">
+            <div className="bg-white/10 rounded-xl p-6">
+              <h3 className="text-4xl font-bold text-white mb-2">
+                {formatCurrency(`R$ ${valorSolicitado.toLocaleString('pt-BR')}`)}
+              </h3>
+              <p className="text-blue-200 text-lg">Valor Total Solicitado</p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white/5 rounded-lg p-4">
+                <h4 className="text-xl font-bold text-green-300">
+                  {result.entrada_sugerida || '20%'}
+                </h4>
+                <p className="text-gray-400 text-sm">Entrada</p>
+                <p className="text-green-200 text-xs">
+                  {formatCurrency(`R$ ${valorEntrada.toLocaleString('pt-BR')}`)}
+                </p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-4">
+                <h4 className="text-xl font-bold text-blue-300">
+                  {numeroParcelas}x
+                </h4>
+                <p className="text-gray-400 text-sm">Parcelas</p>
+                <p className="text-blue-200 text-xs">
+                  {formatCurrency(result.valor_parcela)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Resumo Financeiro */}
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-green-800/30 to-blue-800/30 rounded-xl p-6 border border-green-500/30">
+              <h3 className="text-2xl font-bold text-white mb-2">
+                {formatCurrency(`R$ ${valorTotalPago.toLocaleString('pt-BR')}`)}
+              </h3>
+              <p className="text-green-200 text-lg">Valor Total a Pagar</p>
+              <p className="text-green-300 text-sm">
+                +{((valorTotalPago / valorSolicitado - 1) * 100).toFixed(1)}% sobre o valor solicitado
+              </p>
+            </div>
+            
+            <div className="bg-white/5 rounded-lg p-4">
+              <h4 className="text-lg font-bold text-yellow-300">
+                {result.juros_mensal || '1.5%'} a.m.
+              </h4>
+              <p className="text-gray-400 text-sm">Taxa de Juros Mensal</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Indicadores Cadastrais */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <Building2 className="text-blue-400" size={28} />
+          Indicadores Cadastrais
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Object.entries(result.indicadores_cadastrais || {}).map(([key, value]) => {
+            if (!value || key === 'razao_social' || key === 'cnpj') return null;
+            
+            const labels: { [key: string]: string } = {
+              'situacao_cadastral': 'Situação Cadastral',
+              'capital_social': 'Capital Social',
+              'data_abertura': 'Data de Abertura',
+              'porte': 'Porte da Empresa',
+              'atividade_principal': 'Atividade Principal',
+              'socio_administrador': 'Sócio Administrador',
+              'estado': 'Estado',
+              'municipio': 'Município'
+            };
+            
+            return (
+              <div key={key} className="bg-gray-800/50 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-300 mb-2">
+                  {labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </h4>
+                <p className="text-white font-semibold">
+                  {key === 'data_abertura' ? formatDate(value as string) : value as string}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Análise Financeira */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <TrendingUp className="text-green-400" size={28} />
+          Análise Financeira
+        </h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Indicadores Principais */}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="bg-green-900/20 border border-green-600 rounded-lg p-4">
+                <h4 className="text-lg font-bold text-green-200 mb-1">Receita Anual</h4>
+                <p className="text-2xl font-bold text-white">
+                  {formatCurrency(result.indicadores_financeiros?.receita_anual_estimativa)}
+                </p>
+              </div>
+              
+              <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-4">
+                <h4 className="text-lg font-bold text-blue-200 mb-1">Lucro Líquido</h4>
+                <p className="text-2xl font-bold text-white">
+                  {formatCurrency(result.indicadores_financeiros?.lucro_liquido_estimado)}
+                </p>
+                <p className="text-blue-300 text-sm">
+                  Mensal: {formatCurrency(result.indicadores_financeiros?.lucro_mensal_estimado)}
+                </p>
+              </div>
+              
+              <div className="bg-orange-900/20 border border-orange-600 rounded-lg p-4">
+                <h4 className="text-lg font-bold text-orange-200 mb-1">Dívida Bancária</h4>
+                <p className="text-2xl font-bold text-white">
+                  {formatCurrency(result.indicadores_financeiros?.divida_bancaria_estimativa)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Indicadores de Risco */}
+          <div className="space-y-6">
+            <h3 className="text-xl font-bold text-white mb-4">Indicadores de Risco</h3>
+            
+            {/* Parcela sobre Lucro */}
+            <div className={`${parcelaRisk.bgColor} ${parcelaRisk.borderColor} border rounded-lg p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-white">Parcela / Lucro Mensal</h4>
+                <div className="flex items-center gap-2">
+                  {parcelaLucroPercentual > 100 ? (
+                    <AlertTriangle className="text-red-400" size={20} />
+                  ) : parcelaLucroPercentual > 70 ? (
+                    <Info className="text-yellow-400" size={20} />
+                  ) : (
+                    <ThumbsUp className="text-green-400" size={20} />
+                  )}
+                  <span className={`font-bold ${parcelaRisk.color}`}>
+                    {parcelaRisk.level}
+                  </span>
+                </div>
+              </div>
+              <ProgressBar 
+                value={parcelaLucroPercentual} 
+                max={150} 
+                label={`${parcelaLucroPercentual.toFixed(1)}% do lucro mensal`}
+                color={parcelaLucroPercentual > 100 ? 'red' : parcelaLucroPercentual > 70 ? 'yellow' : 'green'}
+                showPercentage={false}
+              />
+              {parcelaLucroPercentual > 100 && (
+                <p className="text-red-300 text-sm mt-2">
+                  ⚠️ Parcela compromete mais que 100% do lucro mensal
+                </p>
+              )}
+            </div>
+
+            {/* Dívida sobre Receita */}
+            <div className={`${dividaRisk.bgColor} ${dividaRisk.borderColor} border rounded-lg p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-white">Dívida / Receita Anual</h4>
+                <span className={`font-bold ${dividaRisk.color}`}>
+                  {dividaRisk.level}
+                </span>
+              </div>
+              <ProgressBar 
+                value={dividaReceitaPercentual} 
+                max={50} 
+                label={`${dividaReceitaPercentual.toFixed(1)}% da receita anual`}
+                color={dividaReceitaPercentual > 30 ? 'red' : dividaReceitaPercentual > 20 ? 'yellow' : 'green'}
+                showPercentage={false}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Indicadores Operacionais */}
+      {result.indicadores_operacionais && (
+        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+            <BarChart3 className="text-purple-400" size={28} />
+            Performance Operacional
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-purple-900/20 border border-purple-600 rounded-lg p-6 text-center">
+              <h4 className="text-3xl font-bold text-purple-300 mb-2">
+                {result.indicadores_operacionais.obras_entregues_ultimo_ano || 0}
+              </h4>
+              <p className="text-purple-200">Obras Entregues (Último Ano)</p>
+            </div>
+            
+            <div className="bg-indigo-900/20 border border-indigo-600 rounded-lg p-6">
+              <h4 className="text-lg font-bold text-indigo-200 mb-2">Especialização</h4>
+              <p className="text-white">
+                {result.indicadores_operacionais.tipo_principal_de_obra || 'N/A'}
+              </p>
+            </div>
+            
+            <div className="bg-cyan-900/20 border border-cyan-600 rounded-lg p-6">
+              <h4 className="text-lg font-bold text-cyan-200 mb-2">Região de Atuação</h4>
+              <p className="text-white">
+                {result.indicadores_operacionais.regiao_de_atuacao || 'N/A'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Análise Interpretativa */}
+      <div className="bg-gradient-to-r from-gray-800/50 to-gray-900/50 rounded-2xl p-8 border border-gray-600">
+        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <FileText className="text-yellow-400" size={28} />
+          Análise Interpretativa
+        </h2>
+        
+        <div className="space-y-6">
+          {/* Motivo da Classificação */}
+          <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-6">
+            <h3 className="text-lg font-bold text-blue-200 mb-3">Justificativa do Score</h3>
+            <p className="text-gray-200 leading-relaxed">
+              {result.motivo || 'Análise baseada nos indicadores financeiros e operacionais da empresa.'}
+            </p>
+          </div>
+
+          {/* Recomendação Final */}
+          {result.recomendacao_final && (
+            <div className="bg-green-900/20 border border-green-600 rounded-lg p-6">
+              <h3 className="text-lg font-bold text-green-200 mb-3 flex items-center gap-2">
+                <ThumbsUp size={20} />
+                Recomendação Final
+              </h3>
+              <p className="text-gray-200 leading-relaxed">
+                {result.recomendacao_final}
+              </p>
+            </div>
+          )}
+
+          {/* Pontos de Atenção */}
+          {(parcelaLucroPercentual > 100 || dividaReceitaPercentual > 30) && (
+            <div className="bg-yellow-900/20 border border-yellow-600 rounded-lg p-6">
+              <h3 className="text-lg font-bold text-yellow-200 mb-3 flex items-center gap-2">
+                <AlertTriangle size={20} />
+                Pontos de Atenção
+              </h3>
+              <ul className="text-gray-200 space-y-2">
+                {parcelaLucroPercentual > 100 && (
+                  <li className="flex items-start gap-2">
+                    <span className="text-yellow-400 mt-1">•</span>
+                    <span>A parcela mensal compromete {parcelaLucroPercentual.toFixed(1)}% do lucro mensal estimado, indicando alto risco de inadimplência.</span>
+                  </li>
+                )}
+                {dividaReceitaPercentual > 30 && (
+                  <li className="flex items-start gap-2">
+                    <span className="text-yellow-400 mt-1">•</span>
+                    <span>O nível de endividamento representa {dividaReceitaPercentual.toFixed(1)}% da receita anual, sugerindo necessidade de monitoramento.</span>
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Botão de Download/Impressão */}
+      <div className="text-center">
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-2 mx-auto bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+        >
+          <Download size={20} />
+          Imprimir Relatório
+        </button>
       </div>
     </div>
   );
@@ -442,57 +836,6 @@ const CreditScore = () => {
     const droppedFiles = Array.from(e.dataTransfer.files);
     const event = { target: { files: droppedFiles } } as any;
     handleFileSelect(event);
-  };
-
-  // Função para renderizar seção de indicadores com ícone
-  const renderIndicatorSection = (title: string, icon: any, data: any, bgColor: string, iconColor: string) => {
-    if (!data || Object.keys(data).length === 0) return null;
-
-    const Icon = icon;
-    
-    return (
-      <div className={`${bgColor} rounded-xl p-6 border border-opacity-30`}>
-        <div className="flex items-center gap-3 mb-6">
-          <Icon className={`${iconColor}`} size={28} />
-          <h3 className="text-xl font-bold text-white">{title}</h3>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Object.entries(data).map(([key, value]) => {
-            if (value === null || value === undefined || value === '') return null;
-            
-            // Formatação de labels mais amigáveis
-            const labelMap: { [key: string]: string } = {
-              'razao_social': 'Razão Social',
-              'cnpj': 'CNPJ',
-              'situacao_cadastral': 'Situação Cadastral',
-              'capital_social': 'Capital Social',
-              'data_abertura': 'Data de Abertura',
-              'porte': 'Porte da Empresa',
-              'atividade_principal': 'Atividade Principal',
-              'socio_administrador': 'Sócio Administrador',
-              'estado': 'Estado',
-              'municipio': 'Município',
-              'receita_anual_estimativa': 'Receita Anual Estimada',
-              'lucro_liquido_estimado': 'Lucro Líquido Estimado',
-              'divida_bancaria_estimativa': 'Dívida Bancária Estimada',
-              'obras_entregues_ultimo_ano': 'Obras Entregues (Último Ano)',
-              'tipo_principal_de_obra': 'Tipo Principal de Obra',
-              'regiao_de_atuacao': 'Região de Atuação'
-            };
-            
-            const label = labelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            
-            return (
-              <div key={key} className="bg-black bg-opacity-20 rounded-lg p-4">
-                <div className="text-sm text-gray-300 mb-1 font-medium">{label}</div>
-                <div className="text-white font-semibold text-lg">{value}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -721,156 +1064,8 @@ const CreditScore = () => {
             </div>
           </div>
         ) : (
-          /* Results */
-          <div className="space-y-8">
-            {/* Header com Score Animado */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20 text-center">
-              <CheckCircle className="mx-auto text-green-400 mb-6" size={64} />
-              <h2 className="text-3xl font-bold text-white mb-8">
-                Análise Concluída
-              </h2>
-              
-              <AnimatedGauge 
-                score={result.score || 78} 
-                classification={result.classificacao || 'Bom'} 
-              />
-              
-              {result.motivo && (
-                <div className="mt-6 bg-white/5 rounded-lg p-6 max-w-4xl mx-auto">
-                  <h3 className="text-lg font-bold text-white mb-3">Análise da Situação</h3>
-                  <p className="text-gray-200 leading-relaxed">{result.motivo}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Condições de Pagamento Melhoradas */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-              <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                <DollarSign className="text-green-400" size={28} />
-                Condições de Pagamento
-              </h3>
-              
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-green-900/30 border border-green-600 rounded-lg p-6 text-center">
-                  <h4 className="text-lg font-bold text-green-200 mb-2">Entrada Sugerida</h4>
-                  <div className="text-3xl font-bold text-white mb-2">
-                    {result.entrada_sugerida || '20%'}
-                  </div>
-                </div>
-
-                <div className="bg-blue-900/30 border border-blue-600 rounded-lg p-6 text-center">
-                  <h4 className="text-lg font-bold text-blue-200 mb-2">Parcelas</h4>
-                  <div className="text-3xl font-bold text-white mb-2">
-                    {result.numero_parcelas || 6}x
-                  </div>
-                </div>
-
-                <div className="bg-purple-900/30 border border-purple-600 rounded-lg p-6 text-center">
-                  <h4 className="text-lg font-bold text-purple-200 mb-2">Valor da Parcela</h4>
-                  <div className="text-2xl font-bold text-white mb-2">
-                    {result.valor_parcela || 'R$ 133.333,33'}
-                  </div>
-                </div>
-
-                <div className="bg-orange-900/30 border border-orange-600 rounded-lg p-6 text-center">
-                  <h4 className="text-lg font-bold text-orange-200 mb-2">Juros Mensal</h4>
-                  <div className="text-3xl font-bold text-white mb-2">
-                    {result.juros_mensal || '1.4%'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Seções de Indicadores Ricas */}
-            <div className="space-y-8">
-              {/* Indicadores Cadastrais */}
-              {renderIndicatorSection(
-                "📋 Informações Cadastrais",
-                Building2,
-                result.indicadores_cadastrais,
-                "bg-blue-900/20 border-blue-500",
-                "text-blue-400"
-              )}
-
-              {/* Indicadores Financeiros */}
-              {renderIndicatorSection(
-                "💰 Análise Financeira",
-                TrendingUp,
-                result.indicadores_financeiros,
-                "bg-green-900/20 border-green-500",
-                "text-green-400"
-              )}
-
-              {/* Indicadores Operacionais */}
-              {renderIndicatorSection(
-                "🏗️ Performance Operacional",
-                BarChart3,
-                result.indicadores_operacionais,
-                "bg-purple-900/20 border-purple-500",
-                "text-purple-400"
-              )}
-            </div>
-
-            {/* Resumo Executivo */}
-            <div className="bg-gradient-to-r from-gray-800/50 to-gray-900/50 rounded-2xl p-8 border border-gray-600">
-              <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                📊 Resumo Executivo
-              </h3>
-              
-              <div className="grid md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-blue-400 mb-2">
-                    {result.score || 'N/A'}
-                  </div>
-                  <div className="text-gray-300">Score de Crédito</div>
-                </div>
-                
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-400 mb-2">
-                    {result.classificacao || 'N/A'}
-                  </div>
-                  <div className="text-gray-300">Classificação</div>
-                </div>
-                
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-400 mb-2">
-                    {result.entrada_sugerida || 'N/A'}
-                  </div>
-                  <div className="text-gray-300">Entrada Recomendada</div>
-                </div>
-              </div>
-              
-              {result.motivo && (
-                <div className="mt-6 pt-6 border-t border-gray-600">
-                  <h4 className="text-lg font-bold text-white mb-3">Justificativa da Análise</h4>
-                  <p className="text-gray-200 leading-relaxed bg-gray-800/30 rounded-lg p-4">
-                    {result.motivo}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Botão Nova Análise */}
-            <div className="text-center">
-              <button
-                onClick={() => {
-                  setFormData({ 
-                    cnpj: '', 
-                    nomeEmpresa: '', 
-                    setorEmpresa: '', 
-                    setorOutros: '', 
-                    valorCredito: '' 
-                  });
-                  setFiles([]);
-                  setResult(null);
-                  setError('');
-                }}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
-              >
-                Nova Análise
-              </button>
-            </div>
-          </div>
+          /* Professional Credit Report */
+          <ProfessionalCreditReport result={result} />
         )}
       </main>
     </div>
