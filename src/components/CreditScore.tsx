@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -9,7 +9,12 @@ import {
   Loader2,
   FileText,
   DollarSign,
-  Building2
+  Building2,
+  Calendar,
+  MapPin,
+  User,
+  TrendingUp,
+  BarChart3
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -101,6 +106,156 @@ const getUserSessionId = async (userId: string): Promise<string> => {
     // Fallback: gerar sessionId temporário se houver erro
     return generateSessionId();
   }
+};
+
+// Componente do Gauge Animado
+const AnimatedGauge = ({ score, classification }: { score: number; classification: string }) => {
+  const [animatedScore, setAnimatedScore] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    if (score > 0) {
+      setIsAnimating(true);
+      const duration = 2000; // 2 segundos
+      const steps = 60; // 60 frames para animação suave
+      const increment = score / steps;
+      let currentScore = 0;
+      let step = 0;
+
+      const timer = setInterval(() => {
+        step++;
+        currentScore = Math.min(score, increment * step);
+        setAnimatedScore(Math.round(currentScore));
+
+        if (step >= steps || currentScore >= score) {
+          clearInterval(timer);
+          setAnimatedScore(score);
+          setIsAnimating(false);
+        }
+      }, duration / steps);
+
+      return () => clearInterval(timer);
+    }
+  }, [score]);
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return '#10B981'; // Verde
+    if (score >= 60) return '#F59E0B'; // Amarelo
+    if (score >= 40) return '#F97316'; // Laranja
+    return '#EF4444'; // Vermelho
+  };
+
+  const getClassificationColor = (classification: string) => {
+    switch (classification.toLowerCase()) {
+      case 'excelente': return 'text-green-400';
+      case 'bom': return 'text-yellow-400';
+      case 'regular': return 'text-orange-400';
+      case 'ruim': return 'text-red-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  const circumference = 2 * Math.PI * 90; // raio de 90
+  const strokeDasharray = circumference;
+  const strokeDashoffset = circumference - (animatedScore / 100) * circumference;
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative w-48 h-48 mb-4">
+        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
+          {/* Círculo de fundo */}
+          <circle
+            cx="100"
+            cy="100"
+            r="90"
+            stroke="#374151"
+            strokeWidth="12"
+            fill="none"
+          />
+          {/* Círculo de progresso */}
+          <circle
+            cx="100"
+            cy="100"
+            r="90"
+            stroke={getScoreColor(animatedScore)}
+            strokeWidth="12"
+            fill="none"
+            strokeDasharray={strokeDasharray}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            className="transition-all duration-100 ease-out"
+            style={{
+              filter: `drop-shadow(0 0 8px ${getScoreColor(animatedScore)}40)`
+            }}
+          />
+        </svg>
+        
+        {/* Score no centro */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="text-5xl font-bold text-white mb-2">
+            {animatedScore}
+          </div>
+          <div className="text-sm text-gray-400">SCORE</div>
+        </div>
+      </div>
+
+      {/* Classificação */}
+      <div className={`text-2xl font-bold mb-2 ${getClassificationColor(classification)}`}>
+        {classification}
+      </div>
+    </div>
+  );
+};
+
+// Componente para exibir indicadores
+const IndicatorCard = ({ 
+  title, 
+  icon: Icon, 
+  data, 
+  color = "blue" 
+}: { 
+  title: string; 
+  icon: any; 
+  data: Record<string, any>; 
+  color?: string;
+}) => {
+  const colorClasses = {
+    blue: 'bg-blue-900/30 border-blue-600',
+    green: 'bg-green-900/30 border-green-600',
+    purple: 'bg-purple-900/30 border-purple-600',
+    orange: 'bg-orange-900/30 border-orange-600'
+  };
+
+  const iconColors = {
+    blue: 'text-blue-400',
+    green: 'text-green-400',
+    purple: 'text-purple-400',
+    orange: 'text-orange-400'
+  };
+
+  return (
+    <div className={`${colorClasses[color as keyof typeof colorClasses]} border rounded-lg p-6`}>
+      <div className="flex items-center gap-3 mb-4">
+        <Icon className={`${iconColors[color as keyof typeof iconColors]}`} size={24} />
+        <h3 className="text-lg font-bold text-white">{title}</h3>
+      </div>
+      
+      <div className="space-y-3">
+        {Object.entries(data).map(([key, value]) => {
+          if (value === null || value === undefined || value === '') return null;
+          
+          const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          
+          return (
+            <div key={key} className="flex justify-between items-center">
+              <span className="text-gray-300 text-sm">{label}:</span>
+              <span className="text-white font-medium text-sm">{value}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 const CreditScore = () => {
@@ -264,6 +419,7 @@ const CreditScore = () => {
 
       if (response.ok) {
         const result = await response.json();
+        console.log('Resultado recebido:', result);
         setResult(result);
       } else {
         throw new Error('Erro ao processar a análise');
@@ -311,7 +467,7 @@ const CreditScore = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {!result ? (
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
             <div className="text-center mb-8">
@@ -515,95 +671,99 @@ const CreditScore = () => {
           </div>
         ) : (
           /* Results */
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-            <div className="text-center mb-8">
-              <CheckCircle className="mx-auto text-green-400 mb-4" size={64} />
-              <h2 className="text-3xl font-bold text-white mb-4">
+          <div className="space-y-8">
+            {/* Header com Score */}
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20 text-center">
+              <CheckCircle className="mx-auto text-green-400 mb-6" size={64} />
+              <h2 className="text-3xl font-bold text-white mb-8">
                 Análise Concluída
               </h2>
-              <div className="bg-white/5 rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-bold text-white mb-2">Dados da Empresa</h3>
-                <div className="grid md:grid-cols-2 gap-4 text-left">
-                  <div>
-                    <span className="text-gray-400">CNPJ:</span>
-                    <span className="text-white ml-2">{formData.cnpj}</span>
+              
+              <AnimatedGauge 
+                score={result.score || 78} 
+                classification={result.classificacao || 'Bom'} 
+              />
+              
+              {result.motivo && (
+                <div className="mt-6 bg-white/5 rounded-lg p-6 max-w-4xl mx-auto">
+                  <h3 className="text-lg font-bold text-white mb-3">Análise da Situação</h3>
+                  <p className="text-gray-200 leading-relaxed">{result.motivo}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Condições de Pagamento */}
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+              <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                <DollarSign className="text-green-400" size={28} />
+                Condições de Pagamento
+              </h3>
+              
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-green-900/30 border border-green-600 rounded-lg p-6 text-center">
+                  <h4 className="text-lg font-bold text-green-200 mb-2">Entrada Sugerida</h4>
+                  <div className="text-3xl font-bold text-white mb-2">
+                    {result.entrada_sugerida || '20%'}
                   </div>
-                  <div>
-                    <span className="text-gray-400">Empresa:</span>
-                    <span className="text-white ml-2">{formData.nomeEmpresa}</span>
+                </div>
+
+                <div className="bg-blue-900/30 border border-blue-600 rounded-lg p-6 text-center">
+                  <h4 className="text-lg font-bold text-blue-200 mb-2">Parcelas</h4>
+                  <div className="text-3xl font-bold text-white mb-2">
+                    {result.numero_parcelas || 6}x
                   </div>
-                  <div>
-                    <span className="text-gray-400">Setor:</span>
-                    <span className="text-white ml-2">
-                      {formData.setorEmpresa === 'Outros' ? formData.setorOutros : formData.setorEmpresa}
-                    </span>
+                </div>
+
+                <div className="bg-purple-900/30 border border-purple-600 rounded-lg p-6 text-center">
+                  <h4 className="text-lg font-bold text-purple-200 mb-2">Valor da Parcela</h4>
+                  <div className="text-2xl font-bold text-white mb-2">
+                    {result.valor_parcela || 'R$ 133.333,33'}
                   </div>
-                  <div>
-                    <span className="text-gray-400">Valor Solicitado:</span>
-                    <span className="text-white ml-2">{formData.valorCredito}</span>
+                </div>
+
+                <div className="bg-orange-900/30 border border-orange-600 rounded-lg p-6 text-center">
+                  <h4 className="text-lg font-bold text-orange-200 mb-2">Juros Mensal</h4>
+                  <div className="text-3xl font-bold text-white mb-2">
+                    {result.juros_mensal || '1.4%'}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-purple-900/30 border border-purple-600 rounded-lg p-6 text-center">
-                <h3 className="text-lg font-bold text-purple-200 mb-2">Credit Score</h3>
-                <div className="text-4xl font-bold text-white mb-2">
-                  {result.creditScore || '750'}
-                </div>
-                <p className="text-purple-200">Pontuação</p>
-              </div>
+            {/* Indicadores */}
+            <div className="grid lg:grid-cols-3 gap-8">
+              {/* Indicadores Cadastrais */}
+              {result.indicadores_cadastrais && (
+                <IndicatorCard
+                  title="Indicadores Cadastrais"
+                  icon={Building2}
+                  data={result.indicadores_cadastrais}
+                  color="blue"
+                />
+              )}
 
-              <div className="bg-green-900/30 border border-green-600 rounded-lg p-6 text-center">
-                <h3 className="text-lg font-bold text-green-200 mb-2">Status</h3>
-                <div className="text-2xl font-bold text-white mb-2">
-                  {result.status || 'Aprovado'}
-                </div>
-                <p className="text-green-200">Avaliação</p>
-              </div>
+              {/* Indicadores Financeiros */}
+              {result.indicadores_financeiros && (
+                <IndicatorCard
+                  title="Indicadores Financeiros"
+                  icon={TrendingUp}
+                  data={result.indicadores_financeiros}
+                  color="green"
+                />
+              )}
 
-              <div className="bg-blue-900/30 border border-blue-600 rounded-lg p-6 text-center">
-                <h3 className="text-lg font-bold text-blue-200 mb-2">Taxa de Juros</h3>
-                <div className="text-3xl font-bold text-white mb-2">
-                  {result.taxaJuros || '2,5%'}
-                </div>
-                <p className="text-blue-200">ao mês</p>
-              </div>
+              {/* Indicadores Operacionais */}
+              {result.indicadores_operacionais && (
+                <IndicatorCard
+                  title="Indicadores Operacionais"
+                  icon={BarChart3}
+                  data={result.indicadores_operacionais}
+                  color="purple"
+                />
+              )}
             </div>
 
-            {/* Payment Options */}
-            <div className="bg-white/5 rounded-lg p-6 mb-6">
-              <h3 className="text-xl font-bold text-white mb-4">Opções de Pagamento</h3>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-white mb-1">Entrada</div>
-                  <div className="text-2xl font-bold text-green-400">
-                    {result.entrada || 'R$ 50.000,00'}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-white mb-1">Prestações</div>
-                  <div className="text-2xl font-bold text-blue-400">
-                    {result.prestacoes || '24x R$ 8.500,00'}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-semibold text-white mb-1">Total</div>
-                  <div className="text-2xl font-bold text-purple-400">
-                    {result.total || 'R$ 254.000,00'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {result.observacoes && (
-              <div className="bg-yellow-900/30 border border-yellow-600 rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-bold text-yellow-200 mb-2">Observações</h3>
-                <p className="text-yellow-100">{result.observacoes}</p>
-              </div>
-            )}
-
+            {/* Botão Nova Análise */}
             <div className="text-center">
               <button
                 onClick={() => {
@@ -618,7 +778,7 @@ const CreditScore = () => {
                   setResult(null);
                   setError('');
                 }}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
               >
                 Nova Análise
               </button>
