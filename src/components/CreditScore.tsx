@@ -20,7 +20,8 @@ import {
   Info,
   Download,
   PieChart as PieChartIcon,
-  Calculator
+  Calculator,
+  Award
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -540,38 +541,6 @@ const CreditSummary = ({ data, valorSolicitado }: { data: any; valorSolicitado: 
   );
 };
 
-// Componente para exibir seções interpretativas
-const InterpretativeSection = ({ title, content, icon: Icon, bgColor }: {
-  title: string;
-  content: string;
-  icon: any;
-  bgColor: string;
-}) => {
-  if (!content) return null;
-
-  // Processar conteúdo markdown simples
-  const processContent = (text: string) => {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/- (.*?)(?=\n|$)/g, '• $1')
-      .replace(/\n/g, '<br />');
-  };
-
-  return (
-    <div className={`${bgColor} rounded-2xl p-8 border border-white/20`}>
-      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-        <Icon className="text-blue-400" size={28} />
-        {title}
-      </h2>
-      <div 
-        className="text-gray-200 leading-relaxed prose prose-invert max-w-none"
-        dangerouslySetInnerHTML={{ __html: processContent(content) }}
-      />
-    </div>
-  );
-};
-
 // Componente do Relatório Profissional
 const ProfessionalCreditReport = ({ result, valorSolicitado }: { result: any; valorSolicitado: number }) => {
   // Extrair seções do output
@@ -926,7 +895,7 @@ const CreditScore = () => {
     return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
   };
 
-  const formatCurrency = (value: string) => {
+  const formatCurrencyInput = (value: string) => {
     const numbers = value.replace(/\D/g, '');
     const amount = parseFloat(numbers) / 100;
     return amount.toLocaleString('pt-BR', {
@@ -944,7 +913,7 @@ const CreditScore = () => {
   };
 
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatCurrency(e.target.value);
+    const formatted = formatCurrencyInput(e.target.value);
     setFormData(prev => ({
       ...prev,
       valorCredito: formatted
@@ -1050,8 +1019,22 @@ const CreditScore = () => {
         body: JSON.stringify(webhookData),
       });
 
-      if (response.ok) {
-        const responseData = await response.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error response:', errorText);
+        throw new Error(`Erro do servidor (${response.status}): ${errorText}`);
+      }
+
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (jsonError) {
+        const responseText = await response.text();
+        console.error('Invalid JSON response:', responseText);
+        throw new Error('Resposta do servidor não é um JSON válido');
+      }
+
+      if (responseData) {
         console.log('Resultado recebido:', responseData);
         
         // Extrair dados JSON do output
@@ -1083,13 +1066,15 @@ const CreditScore = () => {
         } else {
           throw new Error('Resposta inválida do servidor');
         }
-      } else {
-        throw new Error('Erro ao processar a análise');
       }
 
     } catch (error) {
       console.error('Error processing credit score:', error);
-      setError('Erro ao processar análise de crédito. Tente novamente.');
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Erro ao processar análise de crédito. Tente novamente.');
+      }
     } finally {
       setUploading(false);
     }
