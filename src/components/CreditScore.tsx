@@ -18,7 +18,9 @@ import {
   AlertTriangle,
   ThumbsUp,
   Info,
-  Download
+  Download,
+  PieChart as PieChartIcon,
+  Calculator
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -112,16 +114,56 @@ const getUserSessionId = async (userId: string): Promise<string> => {
   }
 };
 
+// Função para extrair dados JSON do output
+const extractJsonFromOutput = (output: string): any => {
+  try {
+    // Procurar por blocos JSON no output
+    const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    
+    // Se não encontrar, tentar procurar por JSON direto
+    const directJsonMatch = output.match(/\{[\s\S]*\}/);
+    if (directJsonMatch) {
+      return JSON.parse(directJsonMatch[0]);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error parsing JSON from output:', error);
+    return null;
+  }
+};
+
+// Função para converter string de moeda para número
+const parseCurrency = (currencyStr: string): number => {
+  if (!currencyStr) return 0;
+  return parseFloat(currencyStr.replace(/[R$\s.,]/g, '').replace(',', '.')) || 0;
+};
+
+// Função para converter percentual para número
+const parsePercentage = (percentStr: string): number => {
+  if (!percentStr) return 0;
+  return parseFloat(percentStr.replace('%', '')) || 0;
+};
+
+// Função para formatar moeda
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(value);
+};
+
 // Componente do Gauge Animado
 const AnimatedGauge = ({ score, classification }: { score: number; classification: string }) => {
   const [animatedScore, setAnimatedScore] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
     if (score > 0) {
-      setIsAnimating(true);
-      const duration = 2000; // 2 segundos
-      const steps = 60; // 60 frames para animação suave
+      const duration = 2000;
+      const steps = 60;
       const increment = score / steps;
       let currentScore = 0;
       let step = 0;
@@ -134,7 +176,6 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
         if (step >= steps || currentScore >= score) {
           clearInterval(timer);
           setAnimatedScore(score);
-          setIsAnimating(false);
         }
       }, duration / steps);
 
@@ -143,10 +184,10 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
   }, [score]);
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return '#10B981'; // Verde
-    if (score >= 60) return '#F59E0B'; // Amarelo
-    if (score >= 40) return '#F97316'; // Laranja
-    return '#EF4444'; // Vermelho
+    if (score >= 80) return '#10B981';
+    if (score >= 60) return '#F59E0B';
+    if (score >= 40) return '#F97316';
+    return '#EF4444';
   };
 
   const getClassificationColor = (classification: string) => {
@@ -159,7 +200,7 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
     }
   };
 
-  const circumference = 2 * Math.PI * 90; // raio de 90
+  const circumference = 2 * Math.PI * 90;
   const strokeDasharray = circumference;
   const strokeDashoffset = circumference - (animatedScore / 100) * circumference;
 
@@ -167,7 +208,6 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
     <div className="flex flex-col items-center">
       <div className="relative w-48 h-48 mb-4">
         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
-          {/* Círculo de fundo */}
           <circle
             cx="100"
             cy="100"
@@ -176,7 +216,6 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
             strokeWidth="12"
             fill="none"
           />
-          {/* Círculo de progresso */}
           <circle
             cx="100"
             cy="100"
@@ -194,7 +233,6 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
           />
         </svg>
         
-        {/* Score no centro */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <div className="text-5xl font-bold text-white mb-2">
             {animatedScore}
@@ -203,7 +241,6 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
         </div>
       </div>
 
-      {/* Classificação */}
       <div className={`text-2xl font-bold mb-2 ${getClassificationColor(classification)}`}>
         {classification}
       </div>
@@ -211,102 +248,283 @@ const AnimatedGauge = ({ score, classification }: { score: number; classificatio
   );
 };
 
-// Componente de Barra de Progresso
-const ProgressBar = ({ 
-  value, 
-  max, 
-  label, 
-  color = 'blue',
-  showPercentage = true 
-}: { 
-  value: number; 
-  max: number; 
-  label: string; 
-  color?: string;
-  showPercentage?: boolean;
-}) => {
-  const percentage = Math.min((value / max) * 100, 100);
-  
-  const getColorClasses = (color: string) => {
-    switch (color) {
-      case 'green': return 'bg-green-500';
-      case 'yellow': return 'bg-yellow-500';
-      case 'orange': return 'bg-orange-500';
-      case 'red': return 'bg-red-500';
-      default: return 'bg-blue-500';
-    }
+// Componente de Gráfico de Pizza
+const PieChart = ({ data, title }: { data: { label: string; value: number; color: string }[]; title: string }) => {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  let cumulativePercentage = 0;
+
+  const createPath = (percentage: number, cumulativePercentage: number) => {
+    const startAngle = cumulativePercentage * 3.6;
+    const endAngle = (cumulativePercentage + percentage) * 3.6;
+    
+    const startAngleRad = (startAngle - 90) * (Math.PI / 180);
+    const endAngleRad = (endAngle - 90) * (Math.PI / 180);
+    
+    const largeArcFlag = percentage > 50 ? 1 : 0;
+    
+    const x1 = 50 + 40 * Math.cos(startAngleRad);
+    const y1 = 50 + 40 * Math.sin(startAngleRad);
+    const x2 = 50 + 40 * Math.cos(endAngleRad);
+    const y2 = 50 + 40 * Math.sin(endAngleRad);
+    
+    return `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
   };
 
   return (
-    <div className="mb-4">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-sm font-medium text-gray-300">{label}</span>
-        {showPercentage && (
-          <span className="text-sm text-gray-400">{percentage.toFixed(1)}%</span>
-        )}
+    <div className="bg-gray-800 rounded-lg p-6">
+      <h3 className="text-lg font-bold text-white mb-4">{title}</h3>
+      <div className="flex items-center gap-6">
+        <svg width="200" height="200" viewBox="0 0 100 100" className="flex-shrink-0">
+          {data.map((item, index) => {
+            const percentage = (item.value / total) * 100;
+            const path = createPath(percentage, cumulativePercentage);
+            cumulativePercentage += percentage;
+            
+            return (
+              <path
+                key={index}
+                d={path}
+                fill={item.color}
+                stroke="#1f2937"
+                strokeWidth="0.5"
+              />
+            );
+          })}
+        </svg>
+        <div className="space-y-2">
+          {data.map((item, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <div 
+                className="w-4 h-4 rounded-full" 
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-gray-300 text-sm">
+                {item.label}: {formatCurrency(item.value)} ({((item.value / total) * 100).toFixed(1)}%)
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="w-full bg-gray-700 rounded-full h-3">
-        <div 
-          className={`h-3 rounded-full transition-all duration-1000 ${getColorClasses(color)}`}
-          style={{ width: `${percentage}%` }}
-        />
+    </div>
+  );
+};
+
+// Componente de Gráfico de Barras
+const BarChart = ({ data, title }: { data: { label: string; value: number; color: string }[]; title: string }) => {
+  const maxValue = Math.max(...data.map(item => item.value));
+
+  return (
+    <div className="bg-gray-800 rounded-lg p-6">
+      <h3 className="text-lg font-bold text-white mb-4">{title}</h3>
+      <div className="space-y-4">
+        {data.map((item, index) => (
+          <div key={index} className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-300 text-sm">{item.label}</span>
+              <span className="text-white font-medium">{formatCurrency(item.value)}</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-3">
+              <div 
+                className="h-3 rounded-full transition-all duration-1000"
+                style={{ 
+                  width: `${(item.value / maxValue) * 100}%`,
+                  backgroundColor: item.color
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Componente de Dados Brutos
+const RawDataDisplay = ({ data }: { data: any }) => {
+  return (
+    <div className="bg-gray-800 rounded-lg p-6">
+      <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+        <FileText className="text-blue-400" size={20} />
+        Dados Brutos da Análise
+      </h3>
+      <div className="bg-gray-900 rounded-lg p-4 overflow-auto">
+        <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      </div>
+    </div>
+  );
+};
+
+// Componente de Resumo Financeiro do Crédito
+const CreditSummary = ({ data, valorSolicitado }: { data: any; valorSolicitado: number }) => {
+  const entradaPercentual = parsePercentage(data.entrada_sugerida || '20%');
+  const valorEntrada = valorSolicitado * (entradaPercentual / 100);
+  const valorFinanciado = valorSolicitado - valorEntrada;
+  const numeroParcelas = data.numero_parcelas || 6;
+  const valorParcela = parseCurrency(data.valor_parcela || '0');
+  const jurosMensal = parsePercentage(data.juros_mensal || '1.5%');
+  
+  // Cálculos financeiros
+  const valorTotalParcelas = valorParcela * numeroParcelas;
+  const valorTotalPago = valorEntrada + valorTotalParcelas;
+  const lucroOperacao = valorTotalPago - valorSolicitado;
+  const percentualLucro = ((lucroOperacao / valorSolicitado) * 100);
+  const jurosTotalPeriodo = ((Math.pow(1 + jurosMensal/100, numeroParcelas) - 1) * 100);
+
+  return (
+    <div className="bg-gradient-to-r from-green-900/50 to-blue-900/50 rounded-2xl p-8 border-2 border-green-500/50">
+      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+        <Calculator className="text-green-400" size={28} />
+        Resumo Financeiro da Operação de Crédito
+      </h2>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Valores Principais */}
+        <div className="space-y-6">
+          <div className="bg-white/10 rounded-xl p-6 border border-green-500/30">
+            <h3 className="text-4xl font-bold text-white mb-2">
+              {formatCurrency(valorSolicitado)}
+            </h3>
+            <p className="text-green-200 text-lg">Valor Total Solicitado</p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/5 rounded-lg p-4 border border-blue-500/30">
+              <h4 className="text-xl font-bold text-blue-300">
+                {data.entrada_sugerida || '20%'}
+              </h4>
+              <p className="text-gray-400 text-sm">Entrada</p>
+              <p className="text-blue-200 text-xs">
+                {formatCurrency(valorEntrada)}
+              </p>
+            </div>
+            <div className="bg-white/5 rounded-lg p-4 border border-purple-500/30">
+              <h4 className="text-xl font-bold text-purple-300">
+                {numeroParcelas}x
+              </h4>
+              <p className="text-gray-400 text-sm">Parcelas</p>
+              <p className="text-purple-200 text-xs">
+                {formatCurrency(valorParcela)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Resumo da Operação */}
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-green-800/30 to-blue-800/30 rounded-xl p-6 border border-green-500/30">
+            <h3 className="text-2xl font-bold text-white mb-2">
+              {formatCurrency(valorTotalPago)}
+            </h3>
+            <p className="text-green-200 text-lg">Valor Total a Receber</p>
+            <p className="text-green-300 text-sm">
+              Entrada + {numeroParcelas} parcelas
+            </p>
+          </div>
+          
+          <div className="bg-gradient-to-r from-yellow-800/30 to-orange-800/30 rounded-xl p-6 border border-yellow-500/30">
+            <h3 className="text-2xl font-bold text-white mb-2">
+              {formatCurrency(lucroOperacao)}
+            </h3>
+            <p className="text-yellow-200 text-lg">Lucro da Operação</p>
+            <p className="text-yellow-300 text-sm">
+              {percentualLucro.toFixed(2)}% sobre o valor solicitado
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/5 rounded-lg p-4 border border-red-500/30">
+              <h4 className="text-lg font-bold text-red-300">
+                {data.juros_mensal || '1.5%'} a.m.
+              </h4>
+              <p className="text-gray-400 text-sm">Taxa Mensal</p>
+            </div>
+            <div className="bg-white/5 rounded-lg p-4 border border-orange-500/30">
+              <h4 className="text-lg font-bold text-orange-300">
+                {jurosTotalPeriodo.toFixed(2)}%
+              </h4>
+              <p className="text-gray-400 text-sm">Juros Total</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabela de Amortização Resumida */}
+      <div className="mt-8 bg-gray-800/50 rounded-xl p-6 border border-gray-600">
+        <h4 className="text-lg font-bold text-white mb-4">Resumo da Amortização</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-600">
+                <th className="text-left text-gray-300 py-2">Componente</th>
+                <th className="text-right text-gray-300 py-2">Valor</th>
+                <th className="text-right text-gray-300 py-2">% do Total</th>
+              </tr>
+            </thead>
+            <tbody className="text-white">
+              <tr className="border-b border-gray-700">
+                <td className="py-2">Entrada ({entradaPercentual}%)</td>
+                <td className="text-right py-2">{formatCurrency(valorEntrada)}</td>
+                <td className="text-right py-2">{((valorEntrada / valorTotalPago) * 100).toFixed(1)}%</td>
+              </tr>
+              <tr className="border-b border-gray-700">
+                <td className="py-2">Parcelas ({numeroParcelas}x)</td>
+                <td className="text-right py-2">{formatCurrency(valorTotalParcelas)}</td>
+                <td className="text-right py-2">{((valorTotalParcelas / valorTotalPago) * 100).toFixed(1)}%</td>
+              </tr>
+              <tr className="border-b border-gray-700">
+                <td className="py-2">Principal</td>
+                <td className="text-right py-2">{formatCurrency(valorSolicitado)}</td>
+                <td className="text-right py-2">{((valorSolicitado / valorTotalPago) * 100).toFixed(1)}%</td>
+              </tr>
+              <tr className="border-b border-gray-700 text-yellow-300">
+                <td className="py-2 font-bold">Juros/Lucro</td>
+                <td className="text-right py-2 font-bold">{formatCurrency(lucroOperacao)}</td>
+                <td className="text-right py-2 font-bold">{((lucroOperacao / valorTotalPago) * 100).toFixed(1)}%</td>
+              </tr>
+              <tr className="text-green-300 font-bold">
+                <td className="py-2">Total a Receber</td>
+                <td className="text-right py-2">{formatCurrency(valorTotalPago)}</td>
+                <td className="text-right py-2">100%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 };
 
 // Componente do Relatório Profissional
-const ProfessionalCreditReport = ({ result }: { result: any }) => {
-  const formatCurrency = (value: string) => {
-    if (!value) return 'N/A';
-    return value;
-  };
-
+const ProfessionalCreditReport = ({ result, valorSolicitado }: { result: any; valorSolicitado: number }) => {
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR');
   };
 
-  const parsePercentage = (percentStr: string): number => {
-    if (!percentStr) return 0;
-    return parseFloat(percentStr.replace('%', ''));
-  };
+  // Dados para gráficos
+  const receitaAnual = parseCurrency(result.indicadores_financeiros?.receita_anual_estimativa || '0');
+  const lucroLiquido = parseCurrency(result.indicadores_financeiros?.lucro_liquido_estimado || '0');
+  const dividaBancaria = parseCurrency(result.indicadores_financeiros?.divida_bancaria_estimativa || '0');
 
-  const parseCurrency = (currencyStr: string): number => {
-    if (!currencyStr) return 0;
-    return parseFloat(currencyStr.replace(/[R$\s.,]/g, '').replace(',', '.')) || 0;
-  };
+  const financialData = [
+    { label: 'Receita Anual', value: receitaAnual, color: '#10B981' },
+    { label: 'Lucro Líquido', value: lucroLiquido, color: '#3B82F6' },
+    { label: 'Dívida Bancária', value: dividaBancaria, color: '#EF4444' }
+  ];
 
-  // Calcular valores para análise
-  const valorSolicitado = 1000000; // R$ 1.000.000 (exemplo)
-  const entradaPercentual = parsePercentage(result.entrada_sugerida || '20%');
-  const valorEntrada = valorSolicitado * (entradaPercentual / 100);
-  const valorFinanciado = valorSolicitado - valorEntrada;
-  const numeroParcelas = result.numero_parcelas || 6;
-  const valorParcela = parseCurrency(result.valor_parcela || 'R$ 133.333,33');
-  const valorTotalPago = valorEntrada + (valorParcela * numeroParcelas);
-  const jurosMensal = parsePercentage(result.juros_mensal || '1.5%');
-
-  // Indicadores de risco
-  const parcelaLucroPercentual = parsePercentage(result.indicadores_financeiros?.percentual_parcela_sobre_lucro || '0%');
-  const dividaReceitaPercentual = parsePercentage(result.indicadores_financeiros?.percentual_divida_sobre_receita || '0%');
-
-  const getRiskLevel = (percentage: number) => {
-    if (percentage > 100) return { level: 'Alto', color: 'text-red-400', bgColor: 'bg-red-900/30', borderColor: 'border-red-600' };
-    if (percentage > 70) return { level: 'Médio', color: 'text-yellow-400', bgColor: 'bg-yellow-900/30', borderColor: 'border-yellow-600' };
-    return { level: 'Baixo', color: 'text-green-400', bgColor: 'bg-green-900/30', borderColor: 'border-green-600' };
-  };
-
-  const parcelaRisk = getRiskLevel(parcelaLucroPercentual);
-  const dividaRisk = getRiskLevel(dividaReceitaPercentual);
+  const distributionData = [
+    { label: 'Lucro', value: lucroLiquido, color: '#10B981' },
+    { label: 'Custos/Despesas', value: receitaAnual - lucroLiquido, color: '#F59E0B' }
+  ];
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto">
       {/* Header com Gauge e Informações da Empresa */}
       <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
-          {/* Gauge Score */}
           <div className="flex justify-center">
             <AnimatedGauge 
               score={result.score || 76} 
@@ -314,7 +532,6 @@ const ProfessionalCreditReport = ({ result }: { result: any }) => {
             />
           </div>
 
-          {/* Informações da Empresa */}
           <div className="lg:col-span-2 space-y-4">
             <div className="border-b border-gray-600 pb-4">
               <h1 className="text-3xl font-bold text-white mb-2">
@@ -344,7 +561,6 @@ const ProfessionalCreditReport = ({ result }: { result: any }) => {
               </div>
             </div>
             
-            {/* Status da Empresa */}
             <div className="flex items-center gap-4">
               <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                 result.indicadores_cadastrais?.situacao_cadastral === 'ATIVA' 
@@ -354,72 +570,26 @@ const ProfessionalCreditReport = ({ result }: { result: any }) => {
                 {result.indicadores_cadastrais?.situacao_cadastral || 'N/A'}
               </div>
               <span className="text-gray-400 text-sm">
-                Capital Social: {formatCurrency(result.indicadores_cadastrais?.capital_social)}
+                Capital Social: {result.indicadores_cadastrais?.capital_social || 'N/A'}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Condições de Crédito - Destaque Principal */}
-      <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-2xl p-8 border-2 border-blue-500/50">
-        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-          <DollarSign className="text-green-400" size={28} />
-          Condições de Crédito Sugeridas
-        </h2>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Valores Principais */}
-          <div className="space-y-6">
-            <div className="bg-white/10 rounded-xl p-6">
-              <h3 className="text-4xl font-bold text-white mb-2">
-                {formatCurrency(`R$ ${valorSolicitado.toLocaleString('pt-BR')}`)}
-              </h3>
-              <p className="text-blue-200 text-lg">Valor Total Solicitado</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/5 rounded-lg p-4">
-                <h4 className="text-xl font-bold text-green-300">
-                  {result.entrada_sugerida || '20%'}
-                </h4>
-                <p className="text-gray-400 text-sm">Entrada</p>
-                <p className="text-green-200 text-xs">
-                  {formatCurrency(`R$ ${valorEntrada.toLocaleString('pt-BR')}`)}
-                </p>
-              </div>
-              <div className="bg-white/5 rounded-lg p-4">
-                <h4 className="text-xl font-bold text-blue-300">
-                  {numeroParcelas}x
-                </h4>
-                <p className="text-gray-400 text-sm">Parcelas</p>
-                <p className="text-blue-200 text-xs">
-                  {formatCurrency(result.valor_parcela)}
-                </p>
-              </div>
-            </div>
-          </div>
+      {/* Resumo Financeiro do Crédito */}
+      <CreditSummary data={result} valorSolicitado={valorSolicitado} />
 
-          {/* Resumo Financeiro */}
-          <div className="space-y-4">
-            <div className="bg-gradient-to-r from-green-800/30 to-blue-800/30 rounded-xl p-6 border border-green-500/30">
-              <h3 className="text-2xl font-bold text-white mb-2">
-                {formatCurrency(`R$ ${valorTotalPago.toLocaleString('pt-BR')}`)}
-              </h3>
-              <p className="text-green-200 text-lg">Valor Total a Pagar</p>
-              <p className="text-green-300 text-sm">
-                +{((valorTotalPago / valorSolicitado - 1) * 100).toFixed(1)}% sobre o valor solicitado
-              </p>
-            </div>
-            
-            <div className="bg-white/5 rounded-lg p-4">
-              <h4 className="text-lg font-bold text-yellow-300">
-                {result.juros_mensal || '1.5%'} a.m.
-              </h4>
-              <p className="text-gray-400 text-sm">Taxa de Juros Mensal</p>
-            </div>
-          </div>
-        </div>
+      {/* Gráficos de Análise Financeira */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <BarChart 
+          data={financialData} 
+          title="Indicadores Financeiros" 
+        />
+        <PieChart 
+          data={distributionData} 
+          title="Distribuição da Receita" 
+        />
       </div>
 
       {/* Indicadores Cadastrais */}
@@ -458,99 +628,73 @@ const ProfessionalCreditReport = ({ result }: { result: any }) => {
         </div>
       </div>
 
-      {/* Análise Financeira */}
+      {/* Análise Financeira Detalhada */}
       <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
         <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
           <TrendingUp className="text-green-400" size={28} />
-          Análise Financeira
+          Análise Financeira Detalhada
         </h2>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Indicadores Principais */}
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-4">
               <div className="bg-green-900/20 border border-green-600 rounded-lg p-4">
                 <h4 className="text-lg font-bold text-green-200 mb-1">Receita Anual</h4>
                 <p className="text-2xl font-bold text-white">
-                  {formatCurrency(result.indicadores_financeiros?.receita_anual_estimativa)}
+                  {result.indicadores_financeiros?.receita_anual_estimativa || 'N/A'}
                 </p>
               </div>
               
               <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-4">
                 <h4 className="text-lg font-bold text-blue-200 mb-1">Lucro Líquido</h4>
                 <p className="text-2xl font-bold text-white">
-                  {formatCurrency(result.indicadores_financeiros?.lucro_liquido_estimado)}
+                  {result.indicadores_financeiros?.lucro_liquido_estimado || 'N/A'}
                 </p>
                 <p className="text-blue-300 text-sm">
-                  Mensal: {formatCurrency(result.indicadores_financeiros?.lucro_mensal_estimado)}
+                  Mensal: {result.indicadores_financeiros?.lucro_mensal_estimado || 'N/A'}
                 </p>
               </div>
               
               <div className="bg-orange-900/20 border border-orange-600 rounded-lg p-4">
                 <h4 className="text-lg font-bold text-orange-200 mb-1">Dívida Bancária</h4>
                 <p className="text-2xl font-bold text-white">
-                  {formatCurrency(result.indicadores_financeiros?.divida_bancaria_estimativa)}
+                  {result.indicadores_financeiros?.divida_bancaria_estimativa || 'N/A'}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Indicadores de Risco */}
           <div className="space-y-6">
             <h3 className="text-xl font-bold text-white mb-4">Indicadores de Risco</h3>
             
-            {/* Parcela sobre Lucro */}
-            <div className={`${parcelaRisk.bgColor} ${parcelaRisk.borderColor} border rounded-lg p-4`}>
+            <div className="bg-yellow-900/20 border border-yellow-600 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-bold text-white">Parcela / Lucro Mensal</h4>
-                <div className="flex items-center gap-2">
-                  {parcelaLucroPercentual > 100 ? (
-                    <AlertTriangle className="text-red-400" size={20} />
-                  ) : parcelaLucroPercentual > 70 ? (
-                    <Info className="text-yellow-400" size={20} />
-                  ) : (
-                    <ThumbsUp className="text-green-400" size={20} />
-                  )}
-                  <span className={`font-bold ${parcelaRisk.color}`}>
-                    {parcelaRisk.level}
-                  </span>
-                </div>
-              </div>
-              <ProgressBar 
-                value={parcelaLucroPercentual} 
-                max={150} 
-                label={`${parcelaLucroPercentual.toFixed(1)}% do lucro mensal`}
-                color={parcelaLucroPercentual > 100 ? 'red' : parcelaLucroPercentual > 70 ? 'yellow' : 'green'}
-                showPercentage={false}
-              />
-              {parcelaLucroPercentual > 100 && (
-                <p className="text-red-300 text-sm mt-2">
-                  ⚠️ Parcela compromete mais que 100% do lucro mensal
-                </p>
-              )}
-            </div>
-
-            {/* Dívida sobre Receita */}
-            <div className={`${dividaRisk.bgColor} ${dividaRisk.borderColor} border rounded-lg p-4`}>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-bold text-white">Dívida / Receita Anual</h4>
-                <span className={`font-bold ${dividaRisk.color}`}>
-                  {dividaRisk.level}
+                <span className="font-bold text-yellow-300">
+                  {result.indicadores_financeiros?.percentual_parcela_sobre_lucro || 'N/A'}
                 </span>
               </div>
-              <ProgressBar 
-                value={dividaReceitaPercentual} 
-                max={50} 
-                label={`${dividaReceitaPercentual.toFixed(1)}% da receita anual`}
-                color={dividaReceitaPercentual > 30 ? 'red' : dividaReceitaPercentual > 20 ? 'yellow' : 'green'}
-                showPercentage={false}
-              />
+              <p className="text-yellow-200 text-sm">
+                Impacto da parcela no fluxo de caixa mensal
+              </p>
+            </div>
+
+            <div className="bg-red-900/20 border border-red-600 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-white">Dívida / Receita Anual</h4>
+                <span className="font-bold text-red-300">
+                  {result.indicadores_financeiros?.percentual_divida_sobre_receita || 'N/A'}
+                </span>
+              </div>
+              <p className="text-red-200 text-sm">
+                Nível de endividamento em relação à receita
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Indicadores Operacionais */}
+      {/* Performance Operacional */}
       {result.indicadores_operacionais && (
         <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
           <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
@@ -591,7 +735,6 @@ const ProfessionalCreditReport = ({ result }: { result: any }) => {
         </h2>
         
         <div className="space-y-6">
-          {/* Motivo da Classificação */}
           <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-6">
             <h3 className="text-lg font-bold text-blue-200 mb-3">Justificativa do Score</h3>
             <p className="text-gray-200 leading-relaxed">
@@ -599,7 +742,6 @@ const ProfessionalCreditReport = ({ result }: { result: any }) => {
             </p>
           </div>
 
-          {/* Recomendação Final */}
           {result.recomendacao_final && (
             <div className="bg-green-900/20 border border-green-600 rounded-lg p-6">
               <h3 className="text-lg font-bold text-green-200 mb-3 flex items-center gap-2">
@@ -611,32 +753,11 @@ const ProfessionalCreditReport = ({ result }: { result: any }) => {
               </p>
             </div>
           )}
-
-          {/* Pontos de Atenção */}
-          {(parcelaLucroPercentual > 100 || dividaReceitaPercentual > 30) && (
-            <div className="bg-yellow-900/20 border border-yellow-600 rounded-lg p-6">
-              <h3 className="text-lg font-bold text-yellow-200 mb-3 flex items-center gap-2">
-                <AlertTriangle size={20} />
-                Pontos de Atenção
-              </h3>
-              <ul className="text-gray-200 space-y-2">
-                {parcelaLucroPercentual > 100 && (
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-400 mt-1">•</span>
-                    <span>A parcela mensal compromete {parcelaLucroPercentual.toFixed(1)}% do lucro mensal estimado, indicando alto risco de inadimplência.</span>
-                  </li>
-                )}
-                {dividaReceitaPercentual > 30 && (
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-400 mt-1">•</span>
-                    <span>O nível de endividamento representa {dividaReceitaPercentual.toFixed(1)}% da receita anual, sugerindo necessidade de monitoramento.</span>
-                  </li>
-                )}
-              </ul>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Dados Brutos */}
+      <RawDataDisplay data={result} />
 
       {/* Botão de Download/Impressão */}
       <div className="text-center">
@@ -708,7 +829,6 @@ const CreditScore = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     
-    // Validate files
     const validFiles = selectedFiles.filter(file => {
       const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
       if (!allowedTypes.includes(file.type)) {
@@ -747,12 +867,10 @@ const CreditScore = () => {
     setError('');
 
     try {
-      // Obter sessionId persistente do usuário
       const sessionId = await getUserSessionId(auth.currentUser.uid);
 
       let fileUrls: any[] = [];
 
-      // Upload files to Firebase Storage (se houver arquivos)
       if (files.length > 0) {
         fileUrls = await Promise.all(
           files.map(async (file) => {
@@ -769,10 +887,8 @@ const CreditScore = () => {
         );
       }
 
-      // Determinar setor final
       const setorFinal = formData.setorEmpresa === 'Outros' ? formData.setorOutros.trim() : formData.setorEmpresa;
 
-      // Save to Firestore
       const docRef = await addDoc(collection(db, 'creditScore'), {
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
@@ -785,7 +901,6 @@ const CreditScore = () => {
         status: 'processing'
       });
 
-      // Preparar dados para o webhook
       const webhookData = {
         requestId: docRef.id,
         userId: auth.currentUser.uid,
@@ -802,7 +917,6 @@ const CreditScore = () => {
 
       console.log('Enviando dados para webhook:', webhookData);
 
-      // Send to webhook
       const response = await fetch('https://primary-production-2e3b.up.railway.app/webhook/credit-score', {
         method: 'POST',
         headers: {
@@ -812,9 +926,35 @@ const CreditScore = () => {
       });
 
       if (response.ok) {
-        const result = await response.json();
-        console.log('Resultado recebido:', result);
-        setResult(result);
+        const responseData = await response.json();
+        console.log('Resultado recebido:', responseData);
+        
+        // Extrair dados JSON do output
+        if (responseData && responseData.length > 0 && responseData[0].output) {
+          const extractedData = extractJsonFromOutput(responseData[0].output);
+          if (extractedData) {
+            setResult(extractedData);
+          } else {
+            // Se não conseguir extrair JSON, usar o output completo
+            setResult({
+              score: 75,
+              classificacao: 'Bom',
+              motivo: responseData[0].output,
+              entrada_sugerida: '20%',
+              numero_parcelas: 6,
+              valor_parcela: 'R$ 133.333,33',
+              juros_mensal: '1.5%',
+              indicadores_cadastrais: {
+                razao_social: formData.nomeEmpresa,
+                cnpj: formData.cnpj
+              },
+              indicadores_financeiros: {},
+              rawOutput: responseData[0].output
+            });
+          }
+        } else {
+          throw new Error('Resposta inválida do servidor');
+        }
       } else {
         throw new Error('Erro ao processar a análise');
       }
@@ -837,6 +977,9 @@ const CreditScore = () => {
     const event = { target: { files: droppedFiles } } as any;
     handleFileSelect(event);
   };
+
+  // Converter valor do crédito para número
+  const valorSolicitado = parseCurrency(formData.valorCredito) || 1000000;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
@@ -875,7 +1018,6 @@ const CreditScore = () => {
 
             {/* Form Fields */}
             <div className="space-y-6 mb-8">
-              {/* CNPJ e Nome da Empresa */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-white font-semibold mb-2">
@@ -907,7 +1049,6 @@ const CreditScore = () => {
                 </div>
               </div>
 
-              {/* Setor da Empresa */}
               <div>
                 <label className="block text-white font-semibold mb-2">
                   Setor da Empresa *
@@ -927,7 +1068,6 @@ const CreditScore = () => {
                 </select>
               </div>
 
-              {/* Campo "Outros" - aparece apenas quando "Outros" é selecionado */}
               {formData.setorEmpresa === 'Outros' && (
                 <div>
                   <label className="block text-white font-semibold mb-2">
@@ -944,7 +1084,6 @@ const CreditScore = () => {
                 </div>
               )}
 
-              {/* Valor do Crédito */}
               <div>
                 <label className="block text-white font-semibold mb-2">
                   Valor do Crédito *
@@ -960,7 +1099,7 @@ const CreditScore = () => {
               </div>
             </div>
 
-            {/* File Upload Area - Optional */}
+            {/* File Upload Area */}
             <div className="mb-8">
               <label className="block text-white font-semibold mb-4">
                 Demonstrativos Financeiros (Opcional)
@@ -993,7 +1132,6 @@ const CreditScore = () => {
                 />
               </div>
 
-              {/* Selected Files */}
               {files.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <h4 className="text-white font-medium">Arquivos selecionados:</h4>
@@ -1065,7 +1203,7 @@ const CreditScore = () => {
           </div>
         ) : (
           /* Professional Credit Report */
-          <ProfessionalCreditReport result={result} />
+          <ProfessionalCreditReport result={result} valorSolicitado={valorSolicitado} />
         )}
       </main>
     </div>
