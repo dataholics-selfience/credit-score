@@ -117,16 +117,23 @@ const getUserSessionId = async (userId: string): Promise<string> => {
 // Função para extrair dados JSON do output
 const extractJsonFromOutput = (output: string): any => {
   try {
-    // Procurar por blocos JSON no output
-    const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
+    // Procurar por blocos JSON no output (mais flexível)
+    const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/i);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[1]);
+      const jsonString = jsonMatch[1].trim();
+      return JSON.parse(jsonString);
     }
     
-    // Se não encontrar, tentar procurar por JSON direto
-    const directJsonMatch = output.match(/\{[\s\S]*\}/);
+    // Se não encontrar, tentar procurar por JSON direto (mais robusto)
+    const directJsonMatch = output.match(/\{[\s\S]*?\}(?=\s*(?:\n|$|###|---|\*\*\*))/);
     if (directJsonMatch) {
       return JSON.parse(directJsonMatch[0]);
+    }
+    
+    // Tentar encontrar JSON entre chaves, mesmo sem delimitadores
+    const braceMatch = output.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+    if (braceMatch) {
+      return JSON.parse(braceMatch[0]);
     }
     
     return null;
@@ -136,10 +143,47 @@ const extractJsonFromOutput = (output: string): any => {
   }
 };
 
+// Função para extrair seções do output
+const extractSectionsFromOutput = (output: string) => {
+  const sections = {
+    analysisInterpretation: '',
+    creditRecommendation: '',
+    finalScore: '',
+    rawOutput: output
+  };
+
+  try {
+    // Extrair Análise Interpretativa
+    const analysisMatch = output.match(/###\s*📋\s*Análise Interpretativa\s*([\s\S]*?)(?=###|---|\n\n###|\n\n---)/i);
+    if (analysisMatch) {
+      sections.analysisInterpretation = analysisMatch[1].trim();
+    }
+
+    // Extrair Recomendação de Crédito
+    const recommendationMatch = output.match(/###\s*📊\s*Recomendação de Crédito\s*([\s\S]*?)(?=###|---|\n\n###|\n\n---)/i);
+    if (recommendationMatch) {
+      sections.creditRecommendation = recommendationMatch[1].trim();
+    }
+
+    // Extrair Score Final
+    const scoreMatch = output.match(/###\s*✅\s*Score Final\s*([\s\S]*?)(?=###|---|\n\n###|\n\n---|$)/i);
+    if (scoreMatch) {
+      sections.finalScore = scoreMatch[1].trim();
+    }
+
+    return sections;
+  } catch (error) {
+    console.error('Error extracting sections:', error);
+    return sections;
+  }
+};
+
 // Função para converter string de moeda para número
 const parseCurrency = (currencyStr: string): number => {
   if (!currencyStr) return 0;
-  return parseFloat(currencyStr.replace(/[R$\s.,]/g, '').replace(',', '.')) || 0;
+  // Remover símbolos e converter vírgulas para pontos
+  const cleanStr = currencyStr.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  return parseFloat(cleanStr) || 0;
 };
 
 // Função para converter percentual para número
@@ -496,8 +540,43 @@ const CreditSummary = ({ data, valorSolicitado }: { data: any; valorSolicitado: 
   );
 };
 
+// Componente para exibir seções interpretativas
+const InterpretativeSection = ({ title, content, icon: Icon, bgColor }: {
+  title: string;
+  content: string;
+  icon: any;
+  bgColor: string;
+}) => {
+  if (!content) return null;
+
+  // Processar conteúdo markdown simples
+  const processContent = (text: string) => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/- (.*?)(?=\n|$)/g, '• $1')
+      .replace(/\n/g, '<br />');
+  };
+
+  return (
+    <div className={`${bgColor} rounded-2xl p-8 border border-white/20`}>
+      <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+        <Icon className="text-blue-400" size={28} />
+        {title}
+      </h2>
+      <div 
+        className="text-gray-200 leading-relaxed prose prose-invert max-w-none"
+        dangerouslySetInnerHTML={{ __html: processContent(content) }}
+      />
+    </div>
+  );
+};
+
 // Componente do Relatório Profissional
 const ProfessionalCreditReport = ({ result, valorSolicitado }: { result: any; valorSolicitado: number }) => {
+  // Extrair seções do output
+  const sections = extractSectionsFromOutput(result.rawOutput || '');
+  
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -735,22 +814,68 @@ const ProfessionalCreditReport = ({ result, valorSolicitado }: { result: any; va
         </h2>
         
         <div className="space-y-6">
-          <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-6">
-            <h3 className="text-lg font-bold text-blue-200 mb-3">Justificativa do Score</h3>
-            <p className="text-gray-200 leading-relaxed">
-              {result.motivo || 'Análise baseada nos indicadores financeiros e operacionais da empresa.'}
-            </p>
-          </div>
+          {sections.analysisInterpretation ? (
+            <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-6">
+              <div 
+                className="text-gray-200 leading-relaxed prose prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ 
+                  __html: sections.analysisInterpretation
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/\n/g, '<br />')
+                }}
+              />
+            </div>
+          ) : (
+            <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-6">
+              <h3 className="text-lg font-bold text-blue-200 mb-3">Justificativa do Score</h3>
+              <p className="text-gray-200 leading-relaxed">
+                {result.motivo || 'Análise baseada nos indicadores financeiros e operacionais da empresa.'}
+              </p>
+            </div>
+          )}
 
-          {result.recomendacao_final && (
+          {(sections.creditRecommendation || result.recomendacao_final) && (
             <div className="bg-green-900/20 border border-green-600 rounded-lg p-6">
               <h3 className="text-lg font-bold text-green-200 mb-3 flex items-center gap-2">
                 <ThumbsUp size={20} />
-                Recomendação Final
+                {sections.creditRecommendation ? 'Recomendação de Crédito' : 'Recomendação Final'}
               </h3>
-              <p className="text-gray-200 leading-relaxed">
-                {result.recomendacao_final}
-              </p>
+              {sections.creditRecommendation ? (
+                <div 
+                  className="text-gray-200 leading-relaxed prose prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ 
+                    __html: sections.creditRecommendation
+                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                      .replace(/- (.*?)(?=\n|$)/g, '• $1')
+                      .replace(/\n/g, '<br />')
+                  }}
+                />
+              ) : (
+                <p className="text-gray-200 leading-relaxed">
+                  {result.recomendacao_final}
+                </p>
+              )}
+            </div>
+          )}
+          
+          {sections.finalScore && (
+            <div className="bg-purple-900/20 border border-purple-600 rounded-lg p-6">
+              <h3 className="text-lg font-bold text-purple-200 mb-3 flex items-center gap-2">
+                <Award size={20} />
+                Score Final
+              </h3>
+              <div 
+                className="text-gray-200 leading-relaxed prose prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ 
+                  __html: sections.finalScore
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/- (.*?)(?=\n|$)/g, '• $1')
+                    .replace(/\n/g, '<br />')
+                }}
+              />
             </div>
           )}
         </div>
@@ -933,7 +1058,10 @@ const CreditScore = () => {
         if (responseData && responseData.length > 0 && responseData[0].output) {
           const extractedData = extractJsonFromOutput(responseData[0].output);
           if (extractedData) {
-            setResult(extractedData);
+            setResult({
+              ...extractedData,
+              rawOutput: responseData[0].output
+            });
           } else {
             // Se não conseguir extrair JSON, usar o output completo
             setResult({
