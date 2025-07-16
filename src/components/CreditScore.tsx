@@ -12,14 +12,48 @@ import {
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, setDoc } from 'firebase/firestore';
+
+// Função para gerar sessionId alfanumérico de 24 caracteres
+const generateSessionId = (): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 24; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+// Função para obter ou criar sessionId persistente para o usuário
+const getUserSessionId = async (userId: string): Promise<string> => {
+  try {
+    const sessionDoc = await getDoc(doc(db, 'userSessions', userId));
+    
+    if (sessionDoc.exists()) {
+      return sessionDoc.data().sessionId;
+    } else {
+      // Criar novo sessionId para o usuário
+      const newSessionId = generateSessionId();
+      await setDoc(doc(db, 'userSessions', userId), {
+        sessionId: newSessionId,
+        createdAt: new Date().toISOString(),
+        userId: userId
+      });
+      return newSessionId;
+    }
+  } catch (error) {
+    console.error('Error getting user session ID:', error);
+    // Fallback: gerar sessionId temporário se houver erro
+    return generateSessionId();
+  }
+};
 
 const CreditScore = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     cnpj: '',
-    valorDivida: ''
+    valorCredito: ''
   });
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -60,7 +94,7 @@ const CreditScore = () => {
     const formatted = formatCurrency(e.target.value);
     setFormData(prev => ({
       ...prev,
-      valorDivida: formatted
+      valorCredito: formatted
     }));
   };
 
@@ -90,8 +124,8 @@ const CreditScore = () => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.cnpj || !formData.valorDivida || files.length === 0) {
-      setError('Por favor, preencha todos os campos e faça upload dos demonstrativos');
+    if (!formData.cnpj || !formData.valorCredito) {
+      setError('Por favor, preencha o CNPJ e o valor do crédito');
       return;
     }
 
@@ -101,44 +135,55 @@ const CreditScore = () => {
     setError('');
 
     try {
-      // Upload files to Firebase Storage
-      const fileUrls = await Promise.all(
-        files.map(async (file) => {
-          const storageRef = ref(storage, `demonstrativos/${auth.currentUser!.uid}/${Date.now()}_${file.name}`);
-          const snapshot = await uploadBytes(storageRef, file);
-          const downloadURL = await getDownloadURL(snapshot.ref);
-          return {
-            name: file.name,
-            url: downloadURL,
-            size: file.size,
-            type: file.type
-          };
-        })
-      );
+      // Obter sessionId persistente do usuário
+      const sessionId = await getUserSessionId(auth.currentUser.uid);
+
+      let fileUrls: any[] = [];
+
+      // Upload files to Firebase Storage (se houver arquivos)
+      if (files.length > 0) {
+        fileUrls = await Promise.all(
+          files.map(async (file) => {
+            const storageRef = ref(storage, `demonstrativos/${auth.currentUser!.uid}/${Date.now()}_${file.name}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+            return {
+              name: file.name,
+              url: downloadURL,
+              size: file.size,
+              type: file.type
+            };
+          })
+        );
+      }
 
       // Save to Firestore
       const docRef = await addDoc(collection(db, 'creditScore'), {
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
         cnpj: formData.cnpj,
-        valorDivida: formData.valorDivida,
+        valorCredito: formData.valorCredito,
         files: fileUrls,
         uploadedAt: new Date().toISOString(),
         status: 'processing'
       });
 
-      // Send to webhook
+      // Preparar dados para o webhook
       const webhookData = {
         requestId: docRef.id,
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
         service: 'credit-score',
+        sessionId: sessionId,
         cnpj: formData.cnpj,
-        valorDivida: formData.valorDivida,
+        valorCredito: formData.valorCredito,
         files: fileUrls,
         timestamp: new Date().toISOString()
       };
 
+      console.log('Enviando dados para webhook:', webhookData);
+
+      // Send to webhook
       const response = await fetch('https://primary-production-2e3b.up.railway.app/webhook/credit-score', {
         method: 'POST',
         headers: {
@@ -204,7 +249,7 @@ const CreditScore = () => {
                 Análise de Credit Score PJ
               </h2>
               <p className="text-blue-100 text-lg">
-                Preencha os dados e faça upload dos demonstrativos financeiros
+                Preencha os dados obrigatórios e opcionalmente faça upload dos demonstrativos financeiros
               </p>
             </div>
 
@@ -212,7 +257,7 @@ const CreditScore = () => {
             <div className="grid md:grid-cols-2 gap-6 mb-8">
               <div>
                 <label className="block text-white font-semibold mb-2">
-                  CNPJ da Empresa
+                  CNPJ da Empresa *
                 </label>
                 <input
                   type="text"
@@ -227,12 +272,12 @@ const CreditScore = () => {
 
               <div>
                 <label className="block text-white font-semibold mb-2">
-                  Valor do Crédito
+                  Valor do Crédito *
                 </label>
                 <input
                   type="text"
-                  name="valorDivida"
-                  value={formData.valorDivida}
+                  name="valorCredito"
+                  value={formData.valorCredito}
                   onChange={handleValueChange}
                   placeholder="R$ 0,00"
                   className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -240,10 +285,10 @@ const CreditScore = () => {
               </div>
             </div>
 
-            {/* File Upload Area */}
+            {/* File Upload Area - Optional */}
             <div className="mb-8">
               <label className="block text-white font-semibold mb-4">
-                Demonstrativos Financeiros
+                Demonstrativos Financeiros (Opcional)
               </label>
               
               <div
@@ -259,6 +304,9 @@ const CreditScore = () => {
                 <p className="text-blue-200 mb-4">
                   Formatos aceitos: PDF, JPG, PNG (máx. 10MB cada)
                 </p>
+                <p className="text-sm text-gray-300">
+                  📄 Upload opcional - pode melhorar a precisão da análise
+                </p>
                 
                 <input
                   ref={fileInputRef}
@@ -273,6 +321,7 @@ const CreditScore = () => {
               {/* Selected Files */}
               {files.length > 0 && (
                 <div className="mt-4 space-y-2">
+                  <h4 className="text-white font-medium">Arquivos selecionados:</h4>
                   {files.map((file, index) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
                       <div className="flex items-center gap-3">
@@ -307,9 +356,9 @@ const CreditScore = () => {
             <div className="text-center">
               <button
                 onClick={handleSubmit}
-                disabled={!formData.cnpj || !formData.valorDivida || files.length === 0 || uploading}
+                disabled={!formData.cnpj || !formData.valorCredito || uploading}
                 className={`px-8 py-4 rounded-lg text-lg font-semibold transition-all ${
-                  !formData.cnpj || !formData.valorDivida || files.length === 0 || uploading
+                  !formData.cnpj || !formData.valorCredito || uploading
                     ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                     : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl'
                 }`}
@@ -323,6 +372,20 @@ const CreditScore = () => {
                   'Analisar Credit Score'
                 )}
               </button>
+            </div>
+
+            {/* Info Box */}
+            <div className="mt-8 bg-blue-900/30 border border-blue-600 rounded-lg p-4">
+              <h4 className="text-blue-200 font-medium mb-2 flex items-center gap-2">
+                <DollarSign size={16} />
+                Como funciona
+              </h4>
+              <ul className="text-blue-100 text-sm space-y-1">
+                <li>• CNPJ e valor do crédito são obrigatórios para a análise</li>
+                <li>• Demonstrativos financeiros são opcionais mas podem melhorar a precisão</li>
+                <li>• A análise considera dados públicos e informações fornecidas</li>
+                <li>• Resultado inclui score, taxa de juros e opções de pagamento</li>
+              </ul>
             </div>
           </div>
         ) : (
@@ -396,7 +459,7 @@ const CreditScore = () => {
             <div className="text-center">
               <button
                 onClick={() => {
-                  setFormData({ cnpj: '', valorDivida: '' });
+                  setFormData({ cnpj: '', valorCredito: '' });
                   setFiles([]);
                   setResult(null);
                   setError('');
