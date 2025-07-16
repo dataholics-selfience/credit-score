@@ -444,6 +444,57 @@ const CreditScore = () => {
     handleFileSelect(event);
   };
 
+  // Função para renderizar seção de indicadores com ícone
+  const renderIndicatorSection = (title: string, icon: any, data: any, bgColor: string, iconColor: string) => {
+    if (!data || Object.keys(data).length === 0) return null;
+
+    const Icon = icon;
+    
+    return (
+      <div className={`${bgColor} rounded-xl p-6 border border-opacity-30`}>
+        <div className="flex items-center gap-3 mb-6">
+          <Icon className={`${iconColor}`} size={28} />
+          <h3 className="text-xl font-bold text-white">{title}</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Object.entries(data).map(([key, value]) => {
+            if (value === null || value === undefined || value === '') return null;
+            
+            // Formatação de labels mais amigáveis
+            const labelMap: { [key: string]: string } = {
+              'razao_social': 'Razão Social',
+              'cnpj': 'CNPJ',
+              'situacao_cadastral': 'Situação Cadastral',
+              'capital_social': 'Capital Social',
+              'data_abertura': 'Data de Abertura',
+              'porte': 'Porte da Empresa',
+              'atividade_principal': 'Atividade Principal',
+              'socio_administrador': 'Sócio Administrador',
+              'estado': 'Estado',
+              'municipio': 'Município',
+              'receita_anual_estimativa': 'Receita Anual Estimada',
+              'lucro_liquido_estimado': 'Lucro Líquido Estimado',
+              'divida_bancaria_estimativa': 'Dívida Bancária Estimada',
+              'obras_entregues_ultimo_ano': 'Obras Entregues (Último Ano)',
+              'tipo_principal_de_obra': 'Tipo Principal de Obra',
+              'regiao_de_atuacao': 'Região de Atuação'
+            };
+            
+            const label = labelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            return (
+              <div key={key} className="bg-black bg-opacity-20 rounded-lg p-4">
+                <div className="text-sm text-gray-300 mb-1 font-medium">{label}</div>
+                <div className="text-white font-semibold text-lg">{value}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
       {/* Header */}
@@ -672,7 +723,7 @@ const CreditScore = () => {
         ) : (
           /* Results */
           <div className="space-y-8">
-            {/* Header com Score */}
+            {/* Header com Score Animado */}
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20 text-center">
               <CheckCircle className="mx-auto text-green-400 mb-6" size={64} />
               <h2 className="text-3xl font-bold text-white mb-8">
@@ -692,7 +743,7 @@ const CreditScore = () => {
               )}
             </div>
 
-            {/* Condições de Pagamento */}
+            {/* Condições de Pagamento Melhoradas */}
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
               <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
                 <DollarSign className="text-green-400" size={28} />
@@ -730,36 +781,72 @@ const CreditScore = () => {
               </div>
             </div>
 
-            {/* Indicadores */}
-            <div className="grid lg:grid-cols-3 gap-8">
+            {/* Seções de Indicadores Ricas */}
+            <div className="space-y-8">
               {/* Indicadores Cadastrais */}
-              {result.indicadores_cadastrais && (
-                <IndicatorCard
-                  title="Indicadores Cadastrais"
-                  icon={Building2}
-                  data={result.indicadores_cadastrais}
-                  color="blue"
-                />
+              {renderIndicatorSection(
+                "📋 Informações Cadastrais",
+                Building2,
+                result.indicadores_cadastrais,
+                "bg-blue-900/20 border-blue-500",
+                "text-blue-400"
               )}
 
               {/* Indicadores Financeiros */}
-              {result.indicadores_financeiros && (
-                <IndicatorCard
-                  title="Indicadores Financeiros"
-                  icon={TrendingUp}
-                  data={result.indicadores_financeiros}
-                  color="green"
-                />
+              {renderIndicatorSection(
+                "💰 Análise Financeira",
+                TrendingUp,
+                result.indicadores_financeiros,
+                "bg-green-900/20 border-green-500",
+                "text-green-400"
               )}
 
               {/* Indicadores Operacionais */}
-              {result.indicadores_operacionais && (
-                <IndicatorCard
-                  title="Indicadores Operacionais"
-                  icon={BarChart3}
-                  data={result.indicadores_operacionais}
-                  color="purple"
-                />
+              {renderIndicatorSection(
+                "🏗️ Performance Operacional",
+                BarChart3,
+                result.indicadores_operacionais,
+                "bg-purple-900/20 border-purple-500",
+                "text-purple-400"
+              )}
+            </div>
+
+            {/* Resumo Executivo */}
+            <div className="bg-gradient-to-r from-gray-800/50 to-gray-900/50 rounded-2xl p-8 border border-gray-600">
+              <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                📊 Resumo Executivo
+              </h3>
+              
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-blue-400 mb-2">
+                    {result.score || 'N/A'}
+                  </div>
+                  <div className="text-gray-300">Score de Crédito</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-400 mb-2">
+                    {result.classificacao || 'N/A'}
+                  </div>
+                  <div className="text-gray-300">Classificação</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-400 mb-2">
+                    {result.entrada_sugerida || 'N/A'}
+                  </div>
+                  <div className="text-gray-300">Entrada Recomendada</div>
+                </div>
+              </div>
+              
+              {result.motivo && (
+                <div className="mt-6 pt-6 border-t border-gray-600">
+                  <h4 className="text-lg font-bold text-white mb-3">Justificativa da Análise</h4>
+                  <p className="text-gray-200 leading-relaxed bg-gray-800/30 rounded-lg p-4">
+                    {result.motivo}
+                  </p>
+                </div>
               )}
             </div>
 
