@@ -20,11 +20,62 @@ import {
   AlertTriangle,
   Info,
   Download,
-  Eye
+  Eye,
+  Target,
+  Calculator,
+  CreditCard
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addDoc, collection } from 'firebase/firestore';
+
+interface WebhookCreditAnalysisResponse {
+  empresa: {
+    razao_social: string;
+    cnpj: string;
+    porte: string;
+    estado: string;
+    municipio: string;
+    atividade_principal: string;
+    situacao_cadastral: string;
+    data_abertura: string;
+    socio_administrador: string;
+  };
+  score_credito: {
+    valor: number;
+    classificacao: string;
+    motivo: string;
+  };
+  condicoes_pagamento: {
+    valor_total_financiado: string;
+    entrada_sugerida: string;
+    numero_parcelas: number;
+    valor_parcela: string;
+  };
+  simulacao_financiamento: {
+    taxa_juros_mensal: string;
+    valor_total_pago: string;
+    lucro_liquido_estimado_operacao: string;
+  };
+  analise_empresa: {
+    financeiro: {
+      receita_anual_estimada: string;
+      lucro_liquido_estimado_anual: string;
+      lucro_mensal_estimado: string;
+      divida_bancaria_total: string;
+      percentual_divida_sobre_receita: string;
+      percentual_parcela_sobre_lucro: string;
+    };
+    operacional: {
+      obras_entregues_ultimo_ano: number;
+      tipo_principal_de_obra: string;
+      regiao_de_atuacao: string;
+    };
+    analise_interpretativa: string;
+    recomendacoes: string[];
+  };
+  dados_detalhados?: any;
+}
 
 interface CreditAnalysis {
   score: number;
@@ -34,6 +85,9 @@ interface CreditAnalysis {
   numero_parcelas: number;
   valor_parcela: string;
   juros_mensal: string;
+  valor_total_financiado?: string;
+  valor_total_pago?: string;
+  lucro_liquido_estimado_operacao?: string;
   indicadores_cadastrais: {
     razao_social: string;
     cnpj: string;
@@ -60,14 +114,33 @@ interface CreditAnalysis {
     tipo_principal_de_obra: string;
     regiao_de_atuacao: string;
   };
+  analise_interpretativa?: string;
+  recomendacoes?: string[];
   recomendacao_final?: string;
+  dados_detalhados?: {
+    capital_social: string;
+    situacao_cadastral: string;
+    data_abertura: string;
+    cnpj: string;
+    atividade_principal: string;
+    socio_administrador: string;
+    estado: string;
+    municipio: string;
+    receita_estimada: string;
+    lucro_estimado: string;
+    divida_total: string;
+    obras_entregues: number;
+    regiao_atuacao: string;
+    porte: string;
+  };
 }
 
 const ScoreGauge = ({ score, classification }: { score: number; classification: string }) => {
   const getScoreColor = (score: number) => {
-    if (score >= 80) return { color: '#10B981', bg: 'from-green-500 to-emerald-500' };
-    if (score >= 60) return { color: '#F59E0B', bg: 'from-yellow-500 to-orange-500' };
-    return { color: '#EF4444', bg: 'from-red-500 to-pink-500' };
+    if (score >= 80) return { color: '#10B981', bg: 'from-green-500 to-emerald-500', text: 'Excelente' };
+    if (score >= 60) return { color: '#F59E0B', bg: 'from-yellow-500 to-orange-500', text: 'Bom' };
+    if (score >= 40) return { color: '#EF4444', bg: 'from-orange-500 to-red-500', text: 'Regular' };
+    return { color: '#DC2626', bg: 'from-red-600 to-red-700', text: 'Ruim' };
   };
 
   const { color, bg } = getScoreColor(score);
@@ -76,15 +149,15 @@ const ScoreGauge = ({ score, classification }: { score: number; classification: 
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="relative w-48 h-48 mx-auto">
-      <svg className="w-48 h-48 transform -rotate-90" viewBox="0 0 100 100">
+    <div className="relative w-56 h-56 mx-auto">
+      <svg className="w-56 h-56 transform -rotate-90" viewBox="0 0 100 100">
         {/* Background circle */}
         <circle
           cx="50"
           cy="50"
           r="45"
           stroke="currentColor"
-          strokeWidth="8"
+          strokeWidth="6"
           fill="transparent"
           className="text-gray-700"
         />
@@ -94,7 +167,7 @@ const ScoreGauge = ({ score, classification }: { score: number; classification: 
           cy="50"
           r="45"
           stroke={color}
-          strokeWidth="8"
+          strokeWidth="6"
           fill="transparent"
           strokeDasharray={strokeDasharray}
           strokeDashoffset={strokeDashoffset}
@@ -103,8 +176,8 @@ const ScoreGauge = ({ score, classification }: { score: number; classification: 
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="text-4xl font-bold text-white">{score}</div>
-        <div className={`text-sm font-medium px-3 py-1 rounded-full bg-gradient-to-r ${bg} text-white`}>
+        <div className="text-5xl font-bold text-white mb-2">{score}</div>
+        <div className={`text-lg font-medium px-4 py-2 rounded-full bg-gradient-to-r ${bg} text-white`}>
           {classification}
         </div>
       </div>
@@ -118,7 +191,8 @@ const MetricCard = ({
   value, 
   subtitle, 
   trend, 
-  color = "blue" 
+  color = "blue",
+  size = "normal"
 }: {
   icon: any;
   title: string;
@@ -126,13 +200,15 @@ const MetricCard = ({
   subtitle?: string;
   trend?: 'up' | 'down' | 'neutral';
   color?: string;
+  size?: 'normal' | 'large';
 }) => {
   const colorClasses = {
     blue: 'from-blue-500 to-blue-600',
     green: 'from-green-500 to-green-600',
     yellow: 'from-yellow-500 to-orange-500',
     red: 'from-red-500 to-red-600',
-    purple: 'from-purple-500 to-purple-600'
+    purple: 'from-purple-500 to-purple-600',
+    orange: 'from-orange-500 to-orange-600'
   };
 
   const getTrendIcon = () => {
@@ -141,16 +217,21 @@ const MetricCard = ({
     return null;
   };
 
+  const cardSize = size === 'large' ? 'p-8' : 'p-6';
+  const iconSize = size === 'large' ? 32 : 24;
+  const titleSize = size === 'large' ? 'text-lg' : 'text-sm';
+  const valueSize = size === 'large' ? 'text-4xl' : 'text-2xl';
+
   return (
-    <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-colors">
+    <div className={`bg-gray-800 rounded-xl ${cardSize} border border-gray-700 hover:border-gray-600 transition-colors`}>
       <div className="flex items-center justify-between mb-4">
         <div className={`p-3 rounded-lg bg-gradient-to-r ${colorClasses[color as keyof typeof colorClasses]}`}>
-          <Icon size={24} className="text-white" />
+          <Icon size={iconSize} className="text-white" />
         </div>
         {getTrendIcon()}
       </div>
-      <h3 className="text-gray-400 text-sm font-medium mb-1">{title}</h3>
-      <p className="text-2xl font-bold text-white mb-1">{value}</p>
+      <h3 className={`text-gray-400 ${titleSize} font-medium mb-1`}>{title}</h3>
+      <p className={`${valueSize} font-bold text-white mb-1`}>{value}</p>
       {subtitle && <p className="text-gray-500 text-sm">{subtitle}</p>}
     </div>
   );
@@ -158,23 +239,92 @@ const MetricCard = ({
 
 const RiskIndicator = ({ level, description }: { level: 'low' | 'medium' | 'high'; description: string }) => {
   const configs = {
-    low: { color: 'text-green-400', bg: 'bg-green-900/20', border: 'border-green-600', icon: Shield },
-    medium: { color: 'text-yellow-400', bg: 'bg-yellow-900/20', border: 'border-yellow-600', icon: AlertTriangle },
-    high: { color: 'text-red-400', bg: 'bg-red-900/20', border: 'border-red-600', icon: AlertCircle }
+    low: { color: 'text-green-400', bg: 'bg-green-900/20', border: 'border-green-600', icon: Shield, label: 'Risco Baixo' },
+    medium: { color: 'text-yellow-400', bg: 'bg-yellow-900/20', border: 'border-yellow-600', icon: AlertTriangle, label: 'Risco Médio' },
+    high: { color: 'text-red-400', bg: 'bg-red-900/20', border: 'border-red-600', icon: AlertCircle, label: 'Risco Alto' }
   };
 
   const config = configs[level];
   const Icon = config.icon;
 
   return (
-    <div className={`${config.bg} ${config.border} border rounded-lg p-4`}>
-      <div className="flex items-center gap-3">
-        <Icon size={20} className={config.color} />
-        <span className={`font-medium ${config.color}`}>
-          {level === 'low' ? 'Risco Baixo' : level === 'medium' ? 'Risco Médio' : 'Risco Alto'}
+    <div className={`${config.bg} ${config.border} border rounded-lg p-6`}>
+      <div className="flex items-center gap-3 mb-3">
+        <Icon size={24} className={config.color} />
+        <span className={`font-bold text-lg ${config.color}`}>
+          {config.label}
         </span>
       </div>
-      <p className="text-gray-300 text-sm mt-2">{description}</p>
+      <p className="text-gray-300 leading-relaxed">{description}</p>
+    </div>
+  );
+};
+
+const PaymentSimulation = ({ result }: { result: CreditAnalysis }) => {
+  return (
+    <div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-xl p-8 border border-blue-600/30">
+      <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+        <Calculator className="text-blue-400" />
+        Simulação de Financiamento
+      </h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        <div className="text-center bg-white/5 rounded-lg p-6">
+          <div className="text-3xl font-bold text-blue-400 mb-2">
+            {result.valor_total_financiado || 'N/A'}
+          </div>
+          <div className="text-gray-400">Valor Financiado</div>
+        </div>
+        <div className="text-center bg-white/5 rounded-lg p-6">
+          <div className="text-3xl font-bold text-green-400 mb-2">
+            {result.entrada_sugerida}
+          </div>
+          <div className="text-gray-400">Entrada Sugerida</div>
+        </div>
+        <div className="text-center bg-white/5 rounded-lg p-6">
+          <div className="text-3xl font-bold text-blue-400 mb-2">
+            {result.numero_parcelas}x
+          </div>
+          <div className="text-gray-400">Parcelas</div>
+        </div>
+        <div className="text-center bg-white/5 rounded-lg p-6">
+          <div className="text-3xl font-bold text-purple-400 mb-2">
+            {result.valor_parcela}
+          </div>
+          <div className="text-gray-400">Valor da Parcela</div>
+        </div>
+        <div className="text-center bg-white/5 rounded-lg p-6">
+          <div className="text-3xl font-bold text-orange-400 mb-2">
+            {result.juros_mensal}
+          </div>
+          <div className="text-gray-400">Taxa Mensal</div>
+        </div>
+      </div>
+
+      {/* Resumo Financeiro da Simulação */}
+      <div className="bg-gray-800/50 rounded-lg p-6">
+        <h4 className="text-lg font-bold text-white mb-4">Resumo da Operação</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <div className="text-sm text-gray-400 mb-1">Valor Total Pago</div>
+            <div className="text-2xl font-bold text-purple-400">
+              {result.valor_total_pago || 'N/A'}
+            </div>
+          </div>
+          <div>
+            <div className="text-sm text-gray-400 mb-1">Lucro da Operação</div>
+            <div className="text-2xl font-bold text-green-400">
+              {result.lucro_liquido_estimado_operacao || 'N/A'}
+            </div>
+          </div>
+          <div>
+            <div className="text-sm text-gray-400 mb-1">Comprometimento do Lucro</div>
+            <div className="text-2xl font-bold text-yellow-400">
+              {result.indicadores_financeiros.percentual_parcela_sobre_lucro || 'N/A'}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -387,9 +537,62 @@ const CreditScore = () => {
           parsedResult = result;
         }
         
+        // Handle both old and new response formats
+        let finalResult: CreditAnalysis | null = null;
+        
         if (parsedResult && parsedResult.score) {
+          // Old format - use as is
+          finalResult = parsedResult;
+        } else if (parsedResult && parsedResult.score_credito) {
+          // New format - transform to old format
+          const webhookResponse = parsedResult as WebhookCreditAnalysisResponse;
+          finalResult = {
+            score: webhookResponse.score_credito.valor,
+            classificacao: webhookResponse.score_credito.classificacao,
+            motivo: webhookResponse.score_credito.motivo,
+            entrada_sugerida: webhookResponse.condicoes_pagamento.entrada_sugerida,
+            numero_parcelas: webhookResponse.condicoes_pagamento.numero_parcelas,
+            valor_parcela: webhookResponse.condicoes_pagamento.valor_parcela,
+            juros_mensal: webhookResponse.simulacao_financiamento.taxa_juros_mensal,
+            valor_total_financiado: webhookResponse.condicoes_pagamento.valor_total_financiado,
+            valor_total_pago: webhookResponse.simulacao_financiamento.valor_total_pago,
+            lucro_liquido_estimado_operacao: webhookResponse.simulacao_financiamento.lucro_liquido_estimado_operacao,
+            indicadores_cadastrais: {
+              razao_social: webhookResponse.empresa.razao_social,
+              cnpj: webhookResponse.empresa.cnpj,
+              situacao_cadastral: webhookResponse.empresa.situacao_cadastral,
+              capital_social: webhookResponse.dados_detalhados?.capital_social || webhookResponse.empresa.capital_social || 'N/A',
+              data_abertura: webhookResponse.empresa.data_abertura,
+              porte: webhookResponse.empresa.porte,
+              atividade_principal: webhookResponse.empresa.atividade_principal,
+              socio_administrador: webhookResponse.empresa.socio_administrador,
+              estado: webhookResponse.empresa.estado,
+              municipio: webhookResponse.empresa.municipio,
+            },
+            indicadores_financeiros: {
+              receita_anual_estimativa: webhookResponse.analise_empresa.financeiro.receita_anual_estimada,
+              lucro_liquido_estimado: webhookResponse.analise_empresa.financeiro.lucro_liquido_estimado_anual,
+              divida_bancaria_estimativa: webhookResponse.analise_empresa.financeiro.divida_bancaria_total,
+              percentual_divida_sobre_receita: webhookResponse.analise_empresa.financeiro.percentual_divida_sobre_receita,
+              lucro_mensal_estimado: webhookResponse.analise_empresa.financeiro.lucro_mensal_estimado,
+              valor_parcela_calculada: webhookResponse.condicoes_pagamento.valor_parcela,
+              percentual_parcela_sobre_lucro: webhookResponse.analise_empresa.financeiro.percentual_parcela_sobre_lucro,
+            },
+            indicadores_operacionais: {
+              obras_entregues_ultimo_ano: webhookResponse.analise_empresa.operacional.obras_entregues_ultimo_ano,
+              tipo_principal_de_obra: webhookResponse.analise_empresa.operacional.tipo_principal_de_obra,
+              regiao_de_atuacao: webhookResponse.analise_empresa.operacional.regiao_de_atuacao,
+            },
+            analise_interpretativa: webhookResponse.analise_empresa.analise_interpretativa,
+            recomendacoes: webhookResponse.analise_empresa.recomendacoes,
+            recomendacao_final: webhookResponse.recomendacao_final,
+            dados_detalhados: webhookResponse.dados_detalhados,
+          };
+        }
+        
+        if (finalResult && finalResult.score) {
           console.log('Parsed result:', parsedResult);
-          setResult(parsedResult);
+          setResult(finalResult);
         } else {
           console.error('No valid JSON found in response:', result);
           setError('Formato de resposta inválido. Não foi possível extrair os dados da análise.');
@@ -422,8 +625,8 @@ const CreditScore = () => {
   };
 
   const getRiskLevel = (score: number): 'low' | 'medium' | 'high' => {
-    if (score >= 80) return 'low';
-    if (score >= 60) return 'medium';
+    if (score >= 70) return 'low';
+    if (score >= 40) return 'medium';
     return 'high';
   };
 
@@ -665,129 +868,89 @@ const CreditScore = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Score Overview Section */}
+        {/* Score Overview Section - Destaque Principal */}
         <section className="mb-12">
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
-              {/* Score Gauge */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+              {/* Score Gauge - Lado Esquerdo */}
               <div className="text-center">
                 <ScoreGauge score={result.score} classification={result.classificacao} />
-                <p className="text-gray-300 mt-4 text-lg">{result.motivo}</p>
+                <div className="mt-6 bg-gray-800/50 rounded-lg p-6">
+                  <h4 className="text-lg font-bold text-white mb-3">Análise do Score</h4>
+                  <p className="text-gray-300 leading-relaxed">{result.motivo}</p>
+                  {result.analise_interpretativa && (
+                    <div className="mt-4 pt-4 border-t border-gray-600">
+                      <h5 className="text-md font-bold text-blue-300 mb-2">Análise Interpretativa</h5>
+                      <p className="text-gray-300 leading-relaxed text-sm">{result.analise_interpretativa}</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Risk Assessment */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-bold text-white mb-4">Avaliação de Risco</h3>
+              {/* Risk Assessment e Recomendação - Lado Direito */}
+              <div className="space-y-6">
                 <RiskIndicator 
                   level={getRiskLevel(result.score)} 
-                  description={result.recomendacao_final || result.motivo}
+                  description={result.recomendacao_final || result.analise_interpretativa || result.motivo}
                 />
-                <div className="bg-blue-900/20 border border-blue-600 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Info size={16} className="text-blue-400" />
-                    <span className="text-blue-400 font-medium">Recomendação</span>
-                  </div>
-                  <p className="text-blue-100 text-sm">
-                    {result.recomendacao_final || "Aprovar crédito com monitoramento regular"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-bold text-white mb-4">Resumo Executivo</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Situação:</span>
-                    <span className="text-green-400 font-medium">{result.indicadores_cadastrais.situacao_cadastral}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Porte:</span>
-                    <span className="text-white">{result.indicadores_cadastrais.porte}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Tempo de Mercado:</span>
-                    <span className="text-white">{getCompanyAge(result.indicadores_cadastrais.data_abertura)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Receita Anual:</span>
-                    <span className="text-white font-medium">{result.indicadores_financeiros.receita_anual_estimativa}</span>
+                
+                {/* Quick Stats da Empresa */}
+                <div className="bg-gray-800/50 rounded-lg p-6">
+                  <h4 className="text-lg font-bold text-white mb-4">Resumo da Empresa</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Situação:</span>
+                      <span className="text-green-400 font-medium">{result.indicadores_cadastrais.situacao_cadastral}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Porte:</span>
+                      <span className="text-white">{result.indicadores_cadastrais.porte}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Tempo de Mercado:</span>
+                      <span className="text-white">{getCompanyAge(result.indicadores_cadastrais.data_abertura)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Receita Anual:</span>
+                      <span className="text-white font-medium">{result.indicadores_financeiros.receita_anual_estimativa}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Capital Social:</span>
+                      <span className="text-white font-medium">{result.indicadores_cadastrais.capital_social}</span>
+                    </div>
                   </div>
                 </div>
+                
+                {/* Recomendações */}
+                {result.recomendacoes && result.recomendacoes.length > 0 && (
+                  <div className="bg-yellow-900/20 border border-yellow-600 rounded-lg p-6">
+                    <h4 className="text-yellow-200 font-medium mb-3 flex items-center gap-2">
+                      <Info size={20} />
+                      Recomendações
+                    </h4>
+                    <ul className="space-y-2">
+                      {result.recomendacoes.map((rec, index) => (
+                        <li key={index} className="text-yellow-100 text-sm flex items-start gap-2">
+                          <span className="text-yellow-400 mt-1">•</span>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </section>
 
-        {/* Credit Terms Section */}
+        {/* Simulação de Pagamento - Seção Central Destacada */}
         <section className="mb-12">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-              <DollarSign className="text-green-400" />
-              Condições de Crédito Propostas
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <MetricCard
-                icon={PieChart}
-                title="Entrada Sugerida"
-                value={result.entrada_sugerida}
-                subtitle="Do valor total"
-                color="green"
-              />
-              <MetricCard
-                icon={Calendar}
-                title="Parcelas"
-                value={`${result.numero_parcelas}x`}
-                subtitle={result.valor_parcela}
-                color="blue"
-              />
-              <MetricCard
-                icon={TrendingUp}
-                title="Taxa de Juros"
-                value={result.juros_mensal}
-                subtitle="Ao mês"
-                color="yellow"
-              />
-              <MetricCard
-                icon={BarChart3}
-                title="Comprometimento"
-                value={result.indicadores_financeiros.percentual_parcela_sobre_lucro || "20%"}
-                subtitle="Do lucro mensal"
-                color="purple"
-              />
-            </div>
-
-            {/* Payment Simulation */}
-            <div className="mt-8 bg-gray-800/50 rounded-xl p-6">
-              <h3 className="text-lg font-bold text-white mb-4">Simulação de Pagamento</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-400 mb-1">
-                    {result.entrada_sugerida}
-                  </div>
-                  <div className="text-gray-400 text-sm">Entrada</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-400 mb-1">
-                    {result.valor_parcela}
-                  </div>
-                  <div className="text-gray-400 text-sm">Por parcela</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-400 mb-1">
-                    {result.juros_mensal}
-                  </div>
-                  <div className="text-gray-400 text-sm">Taxa mensal</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <PaymentSimulation result={result} />
         </section>
 
-        {/* Detailed Analysis Section */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Company Information */}
+        {/* Análise Detalhada - Grid de Informações */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+          {/* Informações Cadastrais */}
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <Building2 className="text-blue-400" />
@@ -817,6 +980,17 @@ const CreditScore = () => {
                 </div>
               </div>
               
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-gray-400 text-sm">Situação Cadastral</label>
+                  <p className="text-green-400 font-medium">{result.indicadores_cadastrais.situacao_cadastral}</p>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-sm">Porte</label>
+                  <p className="text-white font-medium">{result.indicadores_cadastrais.porte}</p>
+                </div>
+              </div>
+              
               <div>
                 <label className="text-gray-400 text-sm">Atividade Principal</label>
                 <p className="text-white font-medium">{result.indicadores_cadastrais.atividade_principal}</p>
@@ -835,7 +1009,7 @@ const CreditScore = () => {
             </div>
           </div>
 
-          {/* Financial Indicators */}
+          {/* Indicadores Financeiros */}
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <TrendingUp className="text-green-400" />
@@ -856,7 +1030,8 @@ const CreditScore = () => {
                 title="Lucro Líquido"
                 value={formatCurrency(result.indicadores_financeiros.lucro_liquido_estimado)}
                 subtitle="Anual estimado"
-                color="blue"
+                color={result.indicadores_financeiros.lucro_liquido_estimado.includes('-') ? 'red' : 'blue'}
+                trend={result.indicadores_financeiros.lucro_liquido_estimado.includes('-') ? 'down' : 'up'}
               />
               
               <MetricCard
@@ -865,6 +1040,7 @@ const CreditScore = () => {
                 value={formatCurrency(result.indicadores_financeiros.divida_bancaria_estimativa)}
                 subtitle={`${result.indicadores_financeiros.percentual_divida_sobre_receita} da receita`}
                 color="yellow"
+                trend="down"
               />
 
               {result.indicadores_financeiros.lucro_mensal_estimado && (
@@ -873,48 +1049,110 @@ const CreditScore = () => {
                   title="Lucro Mensal"
                   value={formatCurrency(result.indicadores_financeiros.lucro_mensal_estimado)}
                   subtitle="Estimado"
-                  color="purple"
+                  color={result.indicadores_financeiros.lucro_mensal_estimado.includes('-') ? 'red' : 'purple'}
+                  trend={result.indicadores_financeiros.lucro_mensal_estimado.includes('-') ? 'down' : 'up'}
                 />
+              )}
+              
+              {/* Indicador de Comprometimento */}
+              {result.indicadores_financeiros.percentual_parcela_sobre_lucro && (
+                <div className="bg-yellow-900/20 border border-yellow-600 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle size={20} className="text-yellow-400" />
+                    <span className="text-yellow-200 font-medium">Comprometimento</span>
+                  </div>
+                  <div className="text-2xl font-bold text-yellow-400">
+                    {result.indicadores_financeiros.percentual_parcela_sobre_lucro}
+                  </div>
+                  <div className="text-yellow-200 text-sm">do lucro mensal</div>
+                </div>
               )}
             </div>
           </div>
         </section>
 
-        {/* Operational Indicators */}
-        <section className="mt-8">
+        {/* Indicadores Operacionais */}
+        <section className="mb-12">
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <BarChart3 className="text-purple-400" />
-              Indicadores Operacionais
+              Performance Operacional
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <MetricCard
-                icon={Building2}
+                icon={Target}
                 title="Obras Entregues"
                 value={result.indicadores_operacionais.obras_entregues_ultimo_ano.toString()}
                 subtitle="Último ano"
                 color="blue"
+                size="large"
               />
               
               <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-                <h3 className="text-gray-400 text-sm font-medium mb-2">Tipo de Obra Principal</h3>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 rounded-lg bg-gradient-to-r from-green-500 to-green-600">
+                    <Building2 size={24} className="text-white" />
+                  </div>
+                </div>
+                <h3 className="text-gray-400 text-sm font-medium mb-2">Especialização</h3>
                 <p className="text-xl font-bold text-white">{result.indicadores_operacionais.tipo_principal_de_obra}</p>
               </div>
               
               <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600">
+                    <MapPin size={24} className="text-white" />
+                  </div>
+                </div>
                 <h3 className="text-gray-400 text-sm font-medium mb-2">Região de Atuação</h3>
-                <p className="text-xl font-bold text-white flex items-center gap-2">
-                  <MapPin size={20} className="text-blue-400" />
-                  {result.indicadores_operacionais.regiao_de_atuacao}
-                </p>
+                <p className="text-xl font-bold text-white">{result.indicadores_operacionais.regiao_de_atuacao}</p>
               </div>
             </div>
           </div>
         </section>
 
+        {/* Dados Detalhados da Empresa */}
+        {result.dados_detalhados && (
+          <section className="mb-12">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                <FileText className="text-gray-400" />
+                Dados Detalhados da Empresa
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="bg-gray-800/50 rounded-lg p-4">
+                  <label className="text-gray-400 text-sm">Capital Social</label>
+                  <p className="text-white font-medium text-lg">{result.dados_detalhados.capital_social}</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-4">
+                  <label className="text-gray-400 text-sm">Receita Estimada</label>
+                  <p className="text-green-400 font-medium text-lg">{result.dados_detalhados.receita_estimada}</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-4">
+                  <label className="text-gray-400 text-sm">Lucro Estimado</label>
+                  <p className="text-blue-400 font-medium text-lg">{result.dados_detalhados.lucro_estimado}</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-4">
+                  <label className="text-gray-400 text-sm">Dívida Total</label>
+                  <p className="text-red-400 font-medium text-lg">{result.dados_detalhados.divida_total}</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-4">
+                  <label className="text-gray-400 text-sm">Obras Entregues</label>
+                  <p className="text-purple-400 font-medium text-lg">{result.dados_detalhados.obras_entregues}</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-4">
+                  <label className="text-gray-400 text-sm">Região de Atuação</label>
+                  <p className="text-orange-400 font-medium text-lg">{result.dados_detalhados.regiao_atuacao}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Action Buttons */}
-        <section className="mt-8 text-center">
+        <section className="text-center">
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={() => {
