@@ -186,17 +186,56 @@ const CreditScore = () => {
   const [formData, setFormData] = useState({
     cnpj: '',
     companyName: '',
+    companySector: '',
     creditValue: ''
+  });
+  const [sessionId] = useState(() => {
+    // Generate persistent 24-character alphanumeric session ID
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 24; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   });
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<CreditAnalysis | null>(null);
   const [error, setError] = useState('');
+
+  const companySectors = [
+    'Construtora',
+    'Incorporadora', 
+    'Construtora e Incorporadora',
+    'Loja de Materiais de Construção',
+    'Engenharia e Consultoria',
+    'Arquitetura e Design',
+    'Demolição e Terraplanagem',
+    'Instalações Elétricas',
+    'Instalações Hidráulicas',
+    'Pintura e Acabamentos',
+    'Serralheria e Esquadrias',
+    'Paisagismo e Jardinagem',
+    'Impermeabilização',
+    'Estruturas Metálicas',
+    'Pré-moldados de Concreto',
+    'Pisos e Revestimentos',
+    'Climatização e Refrigeração',
+    'Segurança e Automação',
+    'Gerenciamento de Obras'
+  ];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  const handleSectorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      companySector: e.target.value
     }));
   };
 
@@ -220,6 +259,10 @@ const CreditScore = () => {
     }
     if (!formData.companyName.trim()) {
       setError('Nome da empresa é obrigatório');
+      return false;
+    }
+    if (!formData.companySector.trim()) {
+      setError('Setor da empresa é obrigatório');
       return false;
     }
     if (!formData.creditValue.trim()) {
@@ -272,11 +315,13 @@ const CreditScore = () => {
         userEmail: auth.currentUser.email,
         cnpj: formData.cnpj,
         companyName: formData.companyName,
+        companySector: formData.companySector,
         fileName: file!.name,
         fileUrl: downloadURL,
         fileSize: file!.size,
         fileType: file!.type,
         creditValue: formData.creditValue,
+        sessionId: sessionId,
         uploadedAt: new Date().toISOString(),
         status: 'processing'
       });
@@ -287,11 +332,13 @@ const CreditScore = () => {
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
         service: 'credit-score',
+        nomeEmpresa: formData.companyName,
+        setorEmpresa: formData.companySector,
         cnpj: formData.cnpj,
-        companyName: formData.companyName,
+        valorCredito: formData.creditValue.replace(/[^\d,]/g, ''), // Remove R$ and other non-numeric chars except comma
         fileUrl: downloadURL,
         fileName: file!.name,
-        creditValue: formData.creditValue,
+        sessionId: sessionId,
         timestamp: new Date().toISOString()
       };
 
@@ -309,23 +356,38 @@ const CreditScore = () => {
         const result = await response.json();
         console.log('Webhook response:', result);
         
-        // Parse the result if it comes in the expected format
-        if (result && result[0] && result[0].output) {
+        // Parse the result - handle both array and direct object formats
+        let parsedResult = null;
+        
+        if (Array.isArray(result) && result[0] && result[0].output) {
+          // Format: [{ "output": "text with ```json\n{...}\n```" }]
           try {
-            // Extract JSON from the output string
             const jsonMatch = result[0].output.match(/```json\n([\s\S]*?)\n```/);
             if (jsonMatch) {
-              const parsedResult = JSON.parse(jsonMatch[1]);
-              setResult(parsedResult);
+              parsedResult = JSON.parse(jsonMatch[1]);
             } else {
-              throw new Error('Invalid response format');
+              // Try to find JSON in the output without markdown formatting
+              const jsonStart = result[0].output.indexOf('{');
+              const jsonEnd = result[0].output.lastIndexOf('}');
+              if (jsonStart !== -1 && jsonEnd !== -1) {
+                const jsonString = result[0].output.substring(jsonStart, jsonEnd + 1);
+                parsedResult = JSON.parse(jsonString);
+              }
             }
-          } catch (parseError) {
-            console.error('Error parsing result:', parseError);
-            setError('Erro ao processar resposta da análise');
+          } catch (error) {
+            console.error('Error parsing JSON from output:', error);
           }
+        } else if (result && typeof result === 'object') {
+          // Direct object format
+          parsedResult = result;
+        }
+        
+        if (parsedResult && parsedResult.score) {
+          console.log('Parsed result:', parsedResult);
+          setResult(parsedResult);
         } else {
-          throw new Error('Invalid response structure');
+          console.error('No valid JSON found in response:', result);
+          setError('Formato de resposta inválido. Não foi possível extrair os dados da análise.');
         }
       } else {
         const errorText = await response.text();
@@ -442,6 +504,26 @@ const CreditScore = () => {
               </div>
             </div>
 
+            {/* Company Sector */}
+            <div className="mb-8">
+              <label className="block text-white text-sm font-medium mb-2">
+                Setor da Empresa *
+              </label>
+              <select
+                name="companySector"
+                value={formData.companySector}
+                onChange={handleSectorChange}
+                className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="" className="bg-gray-800 text-gray-400">Selecione o setor da empresa</option>
+                {companySectors.map((sector, index) => (
+                  <option key={index} value={sector} className="bg-gray-800 text-white">
+                    {sector}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Credit Value Input */}
             <div className="mb-8">
               <label className="block text-white text-sm font-medium mb-2">
@@ -537,7 +619,7 @@ const CreditScore = () => {
                 onClick={() => {
                   setResult(null);
                   setFile(null);
-                  setFormData({ cnpj: '', companyName: '', creditValue: '' });
+                  setFormData({ cnpj: '', companyName: '', companySector: '', creditValue: '' });
                   setError('');
                 }}
                 className="text-white hover:text-blue-200 transition-colors"
@@ -824,7 +906,7 @@ const CreditScore = () => {
               onClick={() => {
                 setResult(null);
                 setFile(null);
-                setFormData({ cnpj: '', companyName: '', creditValue: '' });
+                setFormData({ cnpj: '', companyName: '', companySector: '', creditValue: '' });
                 setError('');
               }}
               className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
