@@ -88,6 +88,7 @@ interface CreditAnalysis {
   valor_total_financiado?: string;
   valor_total_pago?: string;
   lucro_liquido_estimado_operacao?: string;
+  recomendacao_final?: string;
   indicadores_cadastrais: {
     razao_social: string;
     cnpj: string;
@@ -116,7 +117,6 @@ interface CreditAnalysis {
   };
   analise_interpretativa?: string;
   recomendacoes?: string[];
-  recomendacao_final?: string;
   dados_detalhados?: {
     capital_social: string;
     situacao_cadastral: string;
@@ -322,6 +322,269 @@ const PaymentSimulation = ({ result }: { result: CreditAnalysis }) => {
             <div className="text-2xl font-bold text-yellow-400">
               {result.indicadores_financeiros.percentual_parcela_sobre_lucro || 'N/A'}
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const formatCurrency = (value: string) => {
+  return value.replace('R$', '').trim();
+};
+
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('pt-BR');
+};
+
+const getCompanyAge = (dateString: string) => {
+  const foundedDate = new Date(dateString);
+  const now = new Date();
+  const years = now.getFullYear() - foundedDate.getFullYear();
+  return `${years} anos`;
+};
+
+const CashFlowChart = ({ result }: { result: CreditAnalysis }) => {
+  // Extract numerical values for calculations
+  const extractNumber = (value: string): number => {
+    const cleanValue = value.replace(/[^\d,.-]/g, '').replace(',', '.');
+    return parseFloat(cleanValue) || 0;
+  };
+
+  const receita = extractNumber(result.indicadores_financeiros.receita_anual_estimativa);
+  const lucro = extractNumber(result.indicadores_financeiros.lucro_liquido_estimado);
+  const divida = extractNumber(result.indicadores_financeiros.divida_bancaria_estimativa);
+  const valorParcela = extractNumber(result.valor_parcela);
+  const parcelaAnual = valorParcela * 12;
+
+  // Calculate health indicators
+  const margemLucro = receita > 0 ? (lucro / receita) * 100 : 0;
+  const endividamento = receita > 0 ? (divida / receita) * 100 : 0;
+  const comprometimentoCredito = lucro > 0 ? (parcelaAnual / lucro) * 100 : 0;
+
+  // Determine overall health
+  const getHealthStatus = () => {
+    if (margemLucro > 15 && endividamento < 30 && comprometimentoCredito < 40) {
+      return { status: 'Excelente', color: 'text-green-400', bgColor: 'bg-green-500', percentage: 85 };
+    } else if (margemLucro > 10 && endividamento < 50 && comprometimentoCredito < 60) {
+      return { status: 'Boa', color: 'text-blue-400', bgColor: 'bg-blue-500', percentage: 70 };
+    } else if (margemLucro > 5 && endividamento < 70 && comprometimentoCredito < 80) {
+      return { status: 'Regular', color: 'text-yellow-400', bgColor: 'bg-yellow-500', percentage: 50 };
+    } else {
+      return { status: 'Crítica', color: 'text-red-400', bgColor: 'bg-red-500', percentage: 25 };
+    }
+  };
+
+  const healthStatus = getHealthStatus();
+
+  return (
+    <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-8 border border-gray-700">
+      <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+        <PieChart className="text-blue-400" />
+        Análise de Fluxo de Caixa
+      </h3>
+      
+      {/* Health Status Indicator */}
+      <div className="text-center mb-8">
+        <div className="relative w-48 h-48 mx-auto mb-4">
+          <svg className="w-48 h-48 transform -rotate-90" viewBox="0 0 100 100">
+            {/* Background circle */}
+            <circle
+              cx="50"
+              cy="50"
+              r="40"
+              stroke="currentColor"
+              strokeWidth="8"
+              fill="transparent"
+              className="text-gray-700"
+            />
+            {/* Progress circle */}
+            <circle
+              cx="50"
+              cy="50"
+              r="40"
+              stroke="currentColor"
+              strokeWidth="8"
+              fill="transparent"
+              strokeDasharray={`${2 * Math.PI * 40}`}
+              strokeDashoffset={`${2 * Math.PI * 40 * (1 - healthStatus.percentage / 100)}`}
+              strokeLinecap="round"
+              className={`transition-all duration-1000 ease-out ${healthStatus.color}`}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className={`text-4xl font-bold ${healthStatus.color} mb-2`}>
+              {healthStatus.percentage}%
+            </div>
+            <div className={`text-lg font-medium px-4 py-2 rounded-full ${healthStatus.bgColor} text-white`}>
+              {healthStatus.status}
+            </div>
+          </div>
+        </div>
+        <p className="text-gray-300 text-lg">Saúde Financeira para Crédito</p>
+      </div>
+
+      {/* Financial Metrics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-gray-800/50 rounded-lg p-6 text-center">
+          <div className="text-3xl font-bold text-green-400 mb-2">
+            {margemLucro.toFixed(1)}%
+          </div>
+          <div className="text-gray-400 text-sm">Margem de Lucro</div>
+          <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
+            <div 
+              className="bg-green-500 h-2 rounded-full transition-all duration-1000"
+              style={{ width: `${Math.min(margemLucro * 2, 100)}%` }}
+            />
+          </div>
+        </div>
+        
+        <div className="bg-gray-800/50 rounded-lg p-6 text-center">
+          <div className="text-3xl font-bold text-yellow-400 mb-2">
+            {endividamento.toFixed(1)}%
+          </div>
+          <div className="text-gray-400 text-sm">Endividamento</div>
+          <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
+            <div 
+              className="bg-yellow-500 h-2 rounded-full transition-all duration-1000"
+              style={{ width: `${Math.min(endividamento, 100)}%` }}
+            />
+          </div>
+        </div>
+        
+        <div className="bg-gray-800/50 rounded-lg p-6 text-center">
+          <div className="text-3xl font-bold text-red-400 mb-2">
+            {comprometimentoCredito.toFixed(1)}%
+          </div>
+          <div className="text-gray-400 text-sm">Comprometimento</div>
+          <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
+            <div 
+              className="bg-red-500 h-2 rounded-full transition-all duration-1000"
+              style={{ width: `${Math.min(comprometimentoCredito, 100)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Cash Flow Visualization */}
+      <div className="bg-gray-800/30 rounded-lg p-6">
+        <h4 className="text-lg font-bold text-white mb-4">Fluxo de Caixa Projetado (Anual)</h4>
+        <div className="space-y-4">
+          {/* Revenue Bar */}
+          <div className="flex items-center gap-4">
+            <div className="w-24 text-sm text-gray-400">Receita</div>
+            <div className="flex-1 bg-gray-700 rounded-full h-8 relative overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-green-500 to-green-400 h-full rounded-full transition-all duration-1000 flex items-center justify-end pr-4"
+                style={{ width: '100%' }}
+              >
+                <span className="text-white font-bold text-sm">
+                  {result.indicadores_financeiros.receita_anual_estimativa}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Debt Bar */}
+          <div className="flex items-center gap-4">
+            <div className="w-24 text-sm text-gray-400">Dívidas</div>
+            <div className="flex-1 bg-gray-700 rounded-full h-6 relative overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-red-500 to-red-400 h-full rounded-full transition-all duration-1000 flex items-center justify-end pr-4"
+                style={{ width: `${Math.min(endividamento, 100)}%` }}
+              >
+                <span className="text-white font-bold text-xs">
+                  {result.indicadores_financeiros.divida_bancaria_estimativa}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* New Credit Bar */}
+          <div className="flex items-center gap-4">
+            <div className="w-24 text-sm text-gray-400">Novo Crédito</div>
+            <div className="flex-1 bg-gray-700 rounded-full h-6 relative overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-purple-500 to-purple-400 h-full rounded-full transition-all duration-1000 flex items-center justify-end pr-4"
+                style={{ width: `${Math.min(comprometimentoCredito, 100)}%` }}
+              >
+                <span className="text-white font-bold text-xs">
+                  {formatCurrency(parcelaAnual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Net Profit Bar */}
+          <div className="flex items-center gap-4">
+            <div className="w-24 text-sm text-gray-400">Lucro Líq.</div>
+            <div className="flex-1 bg-gray-700 rounded-full h-6 relative overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-1000 flex items-center justify-end pr-4 ${
+                  lucro > 0 ? 'bg-gradient-to-r from-blue-500 to-blue-400' : 'bg-gradient-to-r from-red-600 to-red-500'
+                }`}
+                style={{ width: `${Math.min(Math.abs(margemLucro) * 2, 100)}%` }}
+              >
+                <span className="text-white font-bold text-xs">
+                  {result.indicadores_financeiros.lucro_liquido_estimado}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Risk Assessment */}
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className={`p-4 rounded-lg border ${
+          margemLucro > 15 ? 'bg-green-900/20 border-green-600' : 
+          margemLucro > 10 ? 'bg-yellow-900/20 border-yellow-600' : 
+          'bg-red-900/20 border-red-600'
+        }`}>
+          <div className="text-center">
+            <div className={`text-2xl font-bold ${
+              margemLucro > 15 ? 'text-green-400' : 
+              margemLucro > 10 ? 'text-yellow-400' : 
+              'text-red-400'
+            }`}>
+              {margemLucro > 15 ? '✓' : margemLucro > 10 ? '⚠' : '✗'}
+            </div>
+            <div className="text-sm text-gray-300 mt-1">Rentabilidade</div>
+          </div>
+        </div>
+        
+        <div className={`p-4 rounded-lg border ${
+          endividamento < 30 ? 'bg-green-900/20 border-green-600' : 
+          endividamento < 50 ? 'bg-yellow-900/20 border-yellow-600' : 
+          'bg-red-900/20 border-red-600'
+        }`}>
+          <div className="text-center">
+            <div className={`text-2xl font-bold ${
+              endividamento < 30 ? 'text-green-400' : 
+              endividamento < 50 ? 'text-yellow-400' : 
+              'text-red-400'
+            }`}>
+              {endividamento < 30 ? '✓' : endividamento < 50 ? '⚠' : '✗'}
+            </div>
+            <div className="text-sm text-gray-300 mt-1">Endividamento</div>
+          </div>
+        </div>
+        
+        <div className={`p-4 rounded-lg border ${
+          comprometimentoCredito < 40 ? 'bg-green-900/20 border-green-600' : 
+          comprometimentoCredito < 60 ? 'bg-yellow-900/20 border-yellow-600' : 
+          'bg-red-900/20 border-red-600'
+        }`}>
+          <div className="text-center">
+            <div className={`text-2xl font-bold ${
+              comprometimentoCredito < 40 ? 'text-green-400' : 
+              comprometimentoCredito < 60 ? 'text-yellow-400' : 
+              'text-red-400'
+            }`}>
+              {comprometimentoCredito < 40 ? '✓' : comprometimentoCredito < 60 ? '⚠' : '✗'}
+            </div>
+            <div className="text-sm text-gray-300 mt-1">Capacidade</div>
           </div>
         </div>
       </div>
@@ -550,6 +813,7 @@ const CreditScore = () => {
             score: webhookResponse.score_credito.valor,
             classificacao: webhookResponse.score_credito.classificacao,
             motivo: webhookResponse.score_credito.motivo,
+            recomendacao_final: webhookResponse.recomendacao_final,
             entrada_sugerida: webhookResponse.condicoes_pagamento.entrada_sugerida,
             numero_parcelas: webhookResponse.condicoes_pagamento.numero_parcelas,
             valor_parcela: webhookResponse.condicoes_pagamento.valor_parcela,
@@ -585,7 +849,6 @@ const CreditScore = () => {
             },
             analise_interpretativa: webhookResponse.analise_empresa.analise_interpretativa,
             recomendacoes: webhookResponse.analise_empresa.recomendacoes,
-            recomendacao_final: webhookResponse.recomendacao_final,
             dados_detalhados: webhookResponse.dados_detalhados,
           };
         }
@@ -628,22 +891,6 @@ const CreditScore = () => {
     if (score >= 70) return 'low';
     if (score >= 40) return 'medium';
     return 'high';
-  };
-
-  const formatCurrency = (value: string) => {
-    return value.replace('R$', '').trim();
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR');
-  };
-
-  const getCompanyAge = (dateString: string) => {
-    const foundedDate = new Date(dateString);
-    const now = new Date();
-    const years = now.getFullYear() - foundedDate.getFullYear();
-    return `${years} anos`;
   };
 
   if (!result) {
@@ -828,7 +1075,7 @@ const CreditScore = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
       {/* Header */}
-      <header className="bg-black/20 backdrop-blur-sm border-b border-white/10 sticky top-0 z-10">
+      <header className="bg-black/30 backdrop-blur-md border-b border-white/20 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-6">
             <div className="flex items-center gap-4">
@@ -845,10 +1092,10 @@ const CreditScore = () => {
               </button>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="text-white" size={24} />
+                  <CreditCard className="text-white" size={24} />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white">Análise de Credit Score</h1>
+                  <h1 className="text-xl font-bold text-white">Relatório de Crédito Empresarial</h1>
                   <p className="text-blue-200 text-sm">{result.indicadores_cadastrais.razao_social}</p>
                 </div>
               </div>
@@ -870,18 +1117,29 @@ const CreditScore = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Score Overview Section - Destaque Principal */}
         <section className="mb-12">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 shadow-2xl">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               {/* Score Gauge - Lado Esquerdo */}
               <div className="text-center">
                 <ScoreGauge score={result.score} classification={result.classificacao} />
-                <div className="mt-6 bg-gray-800/50 rounded-lg p-6">
-                  <h4 className="text-lg font-bold text-white mb-3">Análise do Score</h4>
+                <div className="mt-6 bg-gray-800/60 rounded-lg p-6 border border-gray-700">
+                  <h4 className="text-lg font-bold text-white mb-3">Motivo da Classificação</h4>
                   <p className="text-gray-300 leading-relaxed">{result.motivo}</p>
                   {result.analise_interpretativa && (
                     <div className="mt-4 pt-4 border-t border-gray-600">
                       <h5 className="text-md font-bold text-blue-300 mb-2">Análise Interpretativa</h5>
                       <p className="text-gray-300 leading-relaxed text-sm">{result.analise_interpretativa}</p>
+                    </div>
+                  )}
+                  
+                  {/* Recomendações Finais */}
+                  {result.recomendacao_final && (
+                    <div className="mt-4 pt-4 border-t border-gray-600">
+                      <h5 className="text-md font-bold text-green-300 mb-2 flex items-center gap-2">
+                        <Target size={16} />
+                        Recomendação Final
+                      </h5>
+                      <p className="text-gray-300 leading-relaxed text-sm">{result.recomendacao_final}</p>
                     </div>
                   )}
                 </div>
@@ -895,7 +1153,7 @@ const CreditScore = () => {
                 />
                 
                 {/* Quick Stats da Empresa */}
-                <div className="bg-gray-800/50 rounded-lg p-6">
+                <div className="bg-gray-800/60 rounded-lg p-6 border border-gray-700">
                   <h4 className="text-lg font-bold text-white mb-4">Resumo da Empresa</h4>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
@@ -948,10 +1206,15 @@ const CreditScore = () => {
           <PaymentSimulation result={result} />
         </section>
 
+        {/* Análise de Fluxo de Caixa - Nova Seção */}
+        <section className="mb-12">
+          <CashFlowChart result={result} />
+        </section>
+
         {/* Análise Detalhada - Grid de Informações */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           {/* Informações Cadastrais */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 shadow-xl">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <Building2 className="text-blue-400" />
               Informações Cadastrais
@@ -1010,7 +1273,7 @@ const CreditScore = () => {
           </div>
 
           {/* Indicadores Financeiros */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 shadow-xl">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <TrendingUp className="text-green-400" />
               Indicadores Financeiros
@@ -1073,7 +1336,7 @@ const CreditScore = () => {
 
         {/* Indicadores Operacionais */}
         <section className="mb-12">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 shadow-xl">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <BarChart3 className="text-purple-400" />
               Performance Operacional
@@ -1115,7 +1378,7 @@ const CreditScore = () => {
         {/* Dados Detalhados da Empresa */}
         {result.dados_detalhados && (
           <section className="mb-12">
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 shadow-xl">
               <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
                 <FileText className="text-gray-400" />
                 Dados Detalhados da Empresa
@@ -1153,7 +1416,9 @@ const CreditScore = () => {
 
         {/* Action Buttons */}
         <section className="text-center">
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10">
+            <h3 className="text-xl font-bold text-white mb-6">Próximos Passos</h3>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={() => {
                 setResult(null);
@@ -1161,13 +1426,14 @@ const CreditScore = () => {
                 setFormData({ cnpj: '', companyName: '', companySector: '', creditValue: '' });
                 setError('');
               }}
-              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl text-lg"
             >
               Nova Análise
             </button>
-            <button className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg font-semibold transition-all border border-white/30">
+            <button className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-lg font-semibold transition-all border border-white/30 text-lg">
               Salvar Relatório
             </button>
+            </div>
           </div>
         </section>
       </main>
