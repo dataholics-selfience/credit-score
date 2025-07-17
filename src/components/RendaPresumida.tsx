@@ -42,25 +42,35 @@ const RendaPresumida = () => {
   };
 
   const handleUpload = async () => {
-    if (!file || !auth.currentUser) return;
+    if (!auth.currentUser) return;
 
     setUploading(true);
     setError('');
 
     try {
-      // Upload file to Firebase Storage
-      const storageRef = ref(storage, `holerites/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      let downloadURL = '';
+      let fileName = '';
+      let fileSize = 0;
+      let fileType = '';
+
+      // Upload file to Firebase Storage only if file is provided
+      if (file) {
+        const storageRef = ref(storage, `holerites/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        downloadURL = await getDownloadURL(snapshot.ref);
+        fileName = file.name;
+        fileSize = file.size;
+        fileType = file.type;
+      }
 
       // Save to Firestore
       const docRef = await addDoc(collection(db, 'rendaPresumida'), {
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
-        fileName: file.name,
+        fileName: fileName,
         fileUrl: downloadURL,
-        fileSize: file.size,
-        fileType: file.type,
+        fileSize: fileSize,
+        fileType: fileType,
         uploadedAt: new Date().toISOString(),
         status: 'processing'
       });
@@ -72,7 +82,7 @@ const RendaPresumida = () => {
         userEmail: auth.currentUser.email,
         service: 'renda-presumida',
         fileUrl: downloadURL,
-        fileName: file.name,
+        fileName: fileName,
         timestamp: new Date().toISOString()
       };
 
@@ -156,7 +166,7 @@ const RendaPresumida = () => {
             >
               <Upload className="mx-auto text-white mb-4" size={48} />
               <h3 className="text-xl font-semibold text-white mb-2">
-                {file ? file.name : 'Clique ou arraste seu holerite aqui'}
+                {file ? file.name : 'Clique ou arraste seu holerite aqui (opcional)'}
               </h3>
               <p className="text-blue-200 mb-4">
                 Formatos aceitos: PDF, JPG, PNG (máx. 10MB)
@@ -193,9 +203,9 @@ const RendaPresumida = () => {
             <div className="mt-8 text-center">
               <button
                 onClick={handleUpload}
-                disabled={!file || uploading}
+                disabled={uploading}
                 className={`px-8 py-4 rounded-lg text-lg font-semibold transition-all ${
-                  !file || uploading
+                  uploading
                     ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                     : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl'
                 }`}

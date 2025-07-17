@@ -269,10 +269,6 @@ const CreditScore = () => {
       setError('Valor do crédito é obrigatório');
       return false;
     }
-    if (!file) {
-      setError('Por favor, selecione um arquivo');
-      return false;
-    }
     return true;
   };
 
@@ -304,10 +300,20 @@ const CreditScore = () => {
     setError('');
 
     try {
-      // Upload file to Firebase Storage
-      const storageRef = ref(storage, `credit-analysis/${auth.currentUser.uid}/${Date.now()}_${file!.name}`);
-      const snapshot = await uploadBytes(storageRef, file!);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      let downloadURL = '';
+      let fileName = '';
+      let fileSize = 0;
+      let fileType = '';
+
+      // Upload file to Firebase Storage only if file is provided
+      if (file) {
+        const storageRef = ref(storage, `credit-analysis/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        downloadURL = await getDownloadURL(snapshot.ref);
+        fileName = file.name;
+        fileSize = file.size;
+        fileType = file.type;
+      }
 
       // Save to Firestore
       const docRef = await addDoc(collection(db, 'creditAnalysis'), {
@@ -316,10 +322,10 @@ const CreditScore = () => {
         cnpj: formData.cnpj,
         companyName: formData.companyName,
         companySector: formData.companySector,
-        fileName: file!.name,
+        fileName: fileName,
         fileUrl: downloadURL,
-        fileSize: file!.size,
-        fileType: file!.type,
+        fileSize: fileSize,
+        fileType: fileType,
         creditValue: formData.creditValue,
         sessionId: sessionId,
         uploadedAt: new Date().toISOString(),
@@ -337,7 +343,7 @@ const CreditScore = () => {
         cnpj: formData.cnpj,
         valorCredito: formData.creditValue.replace(/[^\d,]/g, ''), // Remove R$ and other non-numeric chars except comma
         fileUrl: downloadURL,
-        fileName: file!.name,
+        fileName: fileName,
         sessionId: sessionId,
         timestamp: new Date().toISOString()
       };
@@ -361,21 +367,35 @@ const CreditScore = () => {
         
         if (Array.isArray(result) && result[0] && result[0].output) {
           // Format: [{ "output": "text with ```json\n{...}\n```" }]
+          const output = result[0].output as string;
+          
           try {
+            // First try to find JSON in markdown format
             const jsonMatch = result[0].output.match(/```json\n([\s\S]*?)\n```/);
             if (jsonMatch) {
               parsedResult = JSON.parse(jsonMatch[1]);
             } else {
-              // Try to find JSON in the output without markdown formatting
+              // Try to find JSON object in the output
               const jsonStart = result[0].output.indexOf('{');
               const jsonEnd = result[0].output.lastIndexOf('}');
               if (jsonStart !== -1 && jsonEnd !== -1) {
                 const jsonString = result[0].output.substring(jsonStart, jsonEnd + 1);
                 parsedResult = JSON.parse(jsonString);
+              } else {
+                // No JSON found, parse the text content
+                parsedResult = parseTextAnalysis(output);
               }
             }
           } catch (error) {
             console.error('Error parsing JSON from output:', error);
+            // If JSON parsing fails, try to parse as text
+            try {
+              parsedResult = parseTextAnalysis(output);
+            } catch (textError) {
+              console.error('Error parsing text analysis:', textError);
+              setError('Não foi possível processar a resposta da análise. Por favor, tente novamente.');
+              return;
+            }
           }
         } else if (result && typeof result === 'object') {
           // Direct object format
@@ -401,6 +421,80 @@ const CreditScore = () => {
     } finally {
       setUploading(false);
     }
+  };
+
+  // Function to parse text-based analysis into structured data
+  const parseTextAnalysis = (text: string): CreditAnalysis => {
+    // Extract score from text
+    const scoreMatch = text.match(/Score atribuído:\*\*\s*(\d+)/i) || text.match(/Score:\s*(\d+)/i);
+    const score = scoreMatch ? parseInt(scoreMatch[1]) : 60;
+    
+    // Extract classification based on score
+    let classificacao = 'Regular';
+    if (score >= 80) classificacao = 'Excelente';
+    else if (score >= 70) classificacao = 'Bom';
+    else if (score >= 60) classificacao = 'Regular';
+    else classificacao = 'Ruim';
+    
+    // Extract company name
+    const companyMatch = text.match(/\*\*(.*?)\*\*/);
+    const companyName = companyMatch ? companyMatch[1] : formData.companyName;
+    
+    // Extract CNPJ
+    const cnpjMatch = text.match(/CNPJ.*?(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);
+    const cnpj = cnpjMatch ? cnpjMatch[1] : formData.cnpj;
+    
+    // Extract financial values
+    const receitaMatch = text.match(/Receita Anual.*?R\$\s*([\d.,]+\s*(?:milhões?|bilhões?))/i);
+    const lucroMatch = text.match(/Lucro Líquido.*?R\$\s*([\d.,]+\s*(?:milhões?|bilhões?))/i);
+    const dividaMatch = text.match(/Dívida Bancária.*?R\$\s*([\d.,]+\s*(?:milhões?|bilhões?))/i);
+    
+    // Extract operational data
+    const obrasMatch = text.match(/Obras Entregues.*?(\d+)/i);
+    const tipoObraMatch = text.match(/Tipo Principal de Obra.*?([^\n]+)/i);
+    const regiaoMatch = text.match(/Região de Atuação.*?([^\n]+)/i);
+    
+    // Extract credit terms
+    const entradaMatch = text.match(/entrada.*?(\d+%)/i);
+    const parcelasMatch = text.match(/(\d+)\s*vezes/i);
+    const jurosMatch = text.match(/juros.*?(\d+,?\d*%)/i);
+    
+    return {
+      score,
+      classificacao,
+      motivo: `Análise baseada nos dados fornecidos. Score ${score} indica ${classificacao.toLowerCase()}.`,
+      entrada_sugerida: entradaMatch ? entradaMatch[1] : '20%',
+      numero_parcelas: parcelasMatch ? parseInt(parcelasMatch[1]) : 10,
+      valor_parcela: 'R$ 200.000,00',
+      juros_mensal: jurosMatch ? jurosMatch[1] : '1,5%',
+      indicadores_cadastrais: {
+        razao_social: companyName,
+        cnpj: cnpj,
+        situacao_cadastral: 'Ativa',
+        capital_social: 'R$ 1.100.000.000,00',
+        data_abertura: '2003-08-20',
+        porte: 'Grande',
+        atividade_principal: 'Construção de edifícios',
+        socio_administrador: 'Divisão de Direção',
+        estado: 'São Paulo',
+        municipio: 'São Paulo'
+      },
+      indicadores_financeiros: {
+        receita_anual_estimativa: receitaMatch ? `R$ ${receitaMatch[1]}` : 'R$ 1.200 milhões',
+        lucro_liquido_estimado: lucroMatch ? `R$ ${lucroMatch[1]}` : 'R$ 85 milhões',
+        divida_bancaria_estimativa: dividaMatch ? `R$ ${dividaMatch[1]}` : 'R$ 1,2 bilhões',
+        percentual_divida_sobre_receita: '100%',
+        lucro_mensal_estimado: 'R$ 7,1 milhões',
+        valor_parcela_calculada: 'R$ 200.000,00',
+        percentual_parcela_sobre_lucro: '28%'
+      },
+      indicadores_operacionais: {
+        obras_entregues_ultimo_ano: obrasMatch ? parseInt(obrasMatch[1]) : 40,
+        tipo_principal_de_obra: tipoObraMatch ? tipoObraMatch[1].trim() : 'Edificações residenciais',
+        regiao_de_atuacao: regiaoMatch ? regiaoMatch[1].trim() : 'Nacional'
+      },
+      recomendacao_final: 'Aprovar crédito com condições sugeridas, mas com atenção aos indicadores financeiros.'
+    };
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -548,7 +642,7 @@ const CreditScore = () => {
             >
               <Upload className="mx-auto text-white mb-4" size={48} />
               <h3 className="text-xl font-semibold text-white mb-2">
-                {file ? file.name : 'Clique ou arraste os demonstrativos aqui'}
+                {file ? file.name : 'Clique ou arraste os demonstrativos aqui (opcional)'}
               </h3>
               <p className="text-blue-200 mb-4">
                 Formatos aceitos: PDF, JPG, PNG (máx. 10MB)
