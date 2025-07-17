@@ -337,14 +337,13 @@ const CreditScore = () => {
         requestId: docRef.id,
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
-        service: 'credit-score',
         nomeEmpresa: formData.companyName,
         setorEmpresa: formData.companySector,
-        cnpj: formData.cnpj,
+        cnpj: formData.cnpj.replace(/[^\d]/g, ''), // Remove formatting, keep only numbers
         valorCredito: formData.creditValue.replace(/[^\d,]/g, ''), // Remove R$ and other non-numeric chars except comma
-        fileUrl: downloadURL,
-        fileName: file!.name,
         sessionId: sessionId,
+        ...(downloadURL && { fileUrl: downloadURL }),
+        ...(file && { fileName: file.name }),
         timestamp: new Date().toISOString()
       };
 
@@ -554,10 +553,10 @@ const CreditScore = () => {
             >
               <Upload className="mx-auto text-white mb-4" size={48} />
               <h3 className="text-xl font-semibold text-white mb-2">
-                {file ? file.name : 'Clique ou arraste os demonstrativos aqui (opcional)'}
+                {file ? file.name : 'Clique ou arraste os demonstrativos aqui'}
               </h3>
               <p className="text-blue-200 mb-4">
-                Formatos aceitos: PDF, JPG, PNG (máx. 10MB) - Opcional
+                Formatos aceitos: PDF, JPG, PNG (máx. 10MB) - OPCIONAL
               </p>
               
               <input
@@ -581,7 +580,7 @@ const CreditScore = () => {
                 <div className="mt-4 p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
                   <div className="flex items-center justify-center gap-2">
                     <AlertCircle className="text-blue-400" size={20} />
-                    <span className="text-blue-200">A análise pode ser feita apenas com os dados informados</span>
+                    <span className="text-blue-200">A análise pode ser feita apenas com os dados da empresa (PDF opcional)</span>
                   </div>
                 </div>
               )}
@@ -610,10 +609,10 @@ const CreditScore = () => {
                 {uploading ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="animate-spin" size={20} />
-                    {file ? 'Analisando Credit Score...' : 'Processando análise...'}
+                    Analisando Credit Score...
                   </div>
                 ) : (
-                  file ? 'Analisar Credit Score' : 'Analisar sem Documentos'
+                  'Analisar Credit Score'
                 )}
               </button>
             </div>
