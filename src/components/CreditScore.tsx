@@ -9,9 +9,7 @@ import {
   Loader2,
   Building2,
   TrendingUp,
-  TrendingDown,
   DollarSign,
-  PieChart,
   BarChart3,
   Shield,
   AlertTriangle,
@@ -20,7 +18,10 @@ import {
   Calendar,
   Users,
   MapPin,
-  Activity
+  Activity,
+  CreditCard,
+  Percent,
+  Calculator
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -235,7 +236,7 @@ const CreditScore = () => {
   };
 
   if (result) {
-    return <CreditScoreReport result={result} onBack={() => {
+    return <CreditScoreDashboard result={result} onBack={() => {
       setResult(null);
       setFiles([]);
       setError('');
@@ -243,22 +244,22 @@ const CreditScore = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-black/20 backdrop-blur-sm border-b border-white/10">
+      <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center py-6">
             <button
               onClick={() => navigate('/dashboard')}
-              className="text-white hover:text-blue-200 transition-colors mr-4"
+              className="text-gray-600 hover:text-gray-900 transition-colors mr-4"
             >
               <ArrowLeft size={24} />
             </button>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
                 <BarChart3 className="text-white" size={24} />
               </div>
-              <h1 className="text-2xl font-bold text-white">Credit Score PJ</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Credit Score PJ</h1>
             </div>
           </div>
         </div>
@@ -266,12 +267,12 @@ const CreditScore = () => {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-white mb-4">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
               Análise de Credit Score Empresarial
             </h2>
-            <p className="text-blue-100 text-lg">
+            <p className="text-gray-600 text-lg">
               Análise de crédito baseada nos dados da empresa e demonstrativos financeiros (opcional)
             </p>
           </div>
@@ -279,7 +280,7 @@ const CreditScore = () => {
           {/* Form Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 CNPJ *
               </label>
               <input
@@ -287,14 +288,14 @@ const CreditScore = () => {
                 name="cnpj"
                 value={formData.cnpj}
                 onChange={handleChange}
-                className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="00.000.000/0001-00"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Nome da Empresa *
               </label>
               <input
@@ -302,14 +303,14 @@ const CreditScore = () => {
                 name="nomeEmpresa"
                 value={formData.nomeEmpresa}
                 onChange={handleChange}
-                className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Razão Social da Empresa"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Categoria da Empresa *
               </label>
               <input
@@ -317,14 +318,14 @@ const CreditScore = () => {
                 name="categoriaEmpresa"
                 value={formData.categoriaEmpresa}
                 onChange={handleChange}
-                className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Ex: Construção Civil, Tecnologia, Comércio"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Valor do Crédito Solicitado *
               </label>
               <input
@@ -332,7 +333,7 @@ const CreditScore = () => {
                 name="valorCredito"
                 value={formData.valorCredito}
                 onChange={handleChange}
-                className="w-full px-4 py-3 bg-white/10 border border-white/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="R$ 1.000.000"
                 required
               />
@@ -341,16 +342,16 @@ const CreditScore = () => {
 
           {/* File Upload Area */}
           <div
-            className="border-2 border-dashed border-white/30 rounded-xl p-12 text-center hover:border-white/50 transition-colors cursor-pointer mb-6"
+            className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors cursor-pointer mb-6"
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
           >
-            <Upload className="mx-auto text-white mb-4" size={48} />
-            <h3 className="text-xl font-semibold text-white mb-2">
+            <Upload className="mx-auto text-gray-400 mb-4" size={48} />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
               {files.length > 0 ? `${files.length} arquivo(s) selecionado(s)` : 'Clique ou arraste seus demonstrativos aqui (opcional)'}
             </h3>
-            <p className="text-blue-200 mb-4">
+            <p className="text-gray-600 mb-4">
               Formatos aceitos: PDF, JPG, PNG (máx. 10MB cada) - Opcional para análise mais precisa
             </p>
             
@@ -366,18 +367,18 @@ const CreditScore = () => {
             {files.length > 0 && (
               <div className="mt-6 space-y-3">
                 {files.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-green-900/30 border border-green-600 rounded-lg">
+                  <div key={index} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="text-green-400" size={20} />
-                      <span className="text-green-200">{file.name}</span>
-                      <span className="text-green-300 text-sm">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      <CheckCircle className="text-green-600" size={20} />
+                      <span className="text-green-800">{file.name}</span>
+                      <span className="text-green-600 text-sm">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
                     </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         removeFile(index);
                       }}
-                      className="text-red-400 hover:text-red-300 p-1"
+                      className="text-red-600 hover:text-red-700 p-1"
                     >
                       <XCircle size={20} />
                     </button>
@@ -387,8 +388,8 @@ const CreditScore = () => {
             )}
             
             {files.length === 0 && (
-              <div className="mt-4 p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
-                <p className="text-blue-200 text-sm">
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-blue-800 text-sm">
                   💡 <strong>Dica:</strong> A análise pode ser feita apenas com os dados do formulário. 
                   O upload de demonstrativos financeiros é opcional e tornará a análise mais precisa.
                 </p>
@@ -397,10 +398,10 @@ const CreditScore = () => {
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-900/30 border border-red-600 rounded-lg">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-center gap-2">
-                <AlertCircle className="text-red-400" size={20} />
-                <span className="text-red-200">{error}</span>
+                <AlertCircle className="text-red-600" size={20} />
+                <span className="text-red-800">{error}</span>
               </div>
             </div>
           )}
@@ -412,8 +413,8 @@ const CreditScore = () => {
               disabled={uploading || !formData.cnpj || !formData.nomeEmpresa || !formData.categoriaEmpresa || !formData.valorCredito}
               className={`px-8 py-4 rounded-lg text-lg font-semibold transition-all ${
                 uploading || !formData.cnpj || !formData.nomeEmpresa || !formData.categoriaEmpresa || !formData.valorCredito
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl'
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl'
               }`}
             >
               {uploading ? (
@@ -427,7 +428,7 @@ const CreditScore = () => {
             </button>
             
             {files.length === 0 && (
-              <p className="text-blue-200 text-sm mt-4">
+              <p className="text-gray-600 text-sm mt-4">
                 Análise baseada apenas nos dados informados no formulário
               </p>
             )}
@@ -455,10 +456,10 @@ const AnimatedGauge = ({ score, size = 200 }: { score: number; size?: number }) 
   const strokeDashoffset = circumference - (animatedScore / 1000) * circumference;
 
   const getScoreColor = (score: number) => {
-    if (score >= 800) return '#10B981'; // green
-    if (score >= 600) return '#F59E0B'; // yellow
-    if (score >= 400) return '#F97316'; // orange
-    return '#EF4444'; // red
+    if (score >= 800) return '#059669'; // green-600
+    if (score >= 600) return '#D97706'; // amber-600
+    if (score >= 400) return '#EA580C'; // orange-600
+    return '#DC2626'; // red-600
   };
 
   const getScoreLabel = (score: number) => {
@@ -476,7 +477,7 @@ const AnimatedGauge = ({ score, size = 200 }: { score: number; size?: number }) 
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#374151"
+          stroke="#E5E7EB"
           strokeWidth="12"
           fill="transparent"
         />
@@ -492,66 +493,26 @@ const AnimatedGauge = ({ score, size = 200 }: { score: number; size?: number }) 
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           className="transition-all duration-2000 ease-out"
-          style={{
-            filter: `drop-shadow(0 0 8px ${getScoreColor(animatedScore)})`
-          }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="text-4xl font-bold text-white mb-1">{animatedScore}</div>
-        <div className="text-sm text-gray-300 font-medium">{getScoreLabel(animatedScore)}</div>
+        <div className="text-4xl font-bold text-gray-900 mb-1">{animatedScore}</div>
+        <div className="text-sm text-gray-600 font-medium">{getScoreLabel(animatedScore)}</div>
         <div className="text-xs text-gray-400">de 1000</div>
       </div>
     </div>
   );
 };
 
-// Componente de Gráfico de Barras Animado
-const AnimatedBarChart = ({ data }: { data: { label: string; value: number; color: string }[] }) => {
-  const [animated, setAnimated] = useState(false);
-  
-  useEffect(() => {
-    const timer = setTimeout(() => setAnimated(true), 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const maxValue = Math.max(...data.map(d => d.value));
-
-  return (
-    <div className="space-y-4">
-      {data.map((item, index) => (
-        <div key={index} className="space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="text-white font-medium">{item.label}</span>
-            <span className="text-white font-bold">
-              R$ {item.value.toLocaleString('pt-BR')}
-            </span>
-          </div>
-          <div className="relative h-8 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-1500 ease-out ${item.color}`}
-              style={{
-                width: animated ? `${(item.value / maxValue) * 100}%` : '0%',
-                boxShadow: `0 0 20px ${item.color.includes('blue') ? '#3B82F6' : item.color.includes('green') ? '#10B981' : '#EF4444'}40`
-              }}
-            >
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">
-                  R$ {item.value.toLocaleString('pt-BR')}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// Componente de Gráfico de Pizza Animado
-const AnimatedPieChart = ({ data, title }: { 
+// Componente de Donut Chart
+const DonutChart = ({ 
+  data, 
+  title, 
+  size = 200 
+}: { 
   data: { label: string; value: number; color: string }[]; 
   title: string;
+  size?: number;
 }) => {
   const [animated, setAnimated] = useState(false);
   
@@ -561,44 +522,42 @@ const AnimatedPieChart = ({ data, title }: {
   }, []);
 
   const total = data.reduce((sum, item) => sum + item.value, 0);
+  const radius = size / 2 - 40;
+  const innerRadius = radius - 30;
+  const circumference = 2 * Math.PI * radius;
+  
   let cumulativePercentage = 0;
 
-  const createPath = (percentage: number, cumulativePercentage: number) => {
-    const startAngle = cumulativePercentage * 3.6;
-    const endAngle = (cumulativePercentage + percentage) * 3.6;
-    
-    const startAngleRad = (startAngle - 90) * (Math.PI / 180);
-    const endAngleRad = (endAngle - 90) * (Math.PI / 180);
-    
-    const largeArcFlag = percentage > 50 ? 1 : 0;
-    
-    const x1 = 100 + 80 * Math.cos(startAngleRad);
-    const y1 = 100 + 80 * Math.sin(startAngleRad);
-    const x2 = 100 + 80 * Math.cos(endAngleRad);
-    const y2 = 100 + 80 * Math.sin(endAngleRad);
-    
-    return `M 100 100 L ${x1} ${y1} A 80 80 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
-  };
-
   return (
-    <div className="bg-gray-800 rounded-xl p-6">
-      <h3 className="text-xl font-bold text-white mb-6 text-center">{title}</h3>
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-6 text-center">{title}</h3>
       <div className="flex items-center justify-center">
         <div className="relative">
-          <svg width="200" height="200" viewBox="0 0 200 200">
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             {data.map((item, index) => {
               const percentage = (item.value / total) * 100;
-              const path = createPath(percentage, cumulativePercentage);
+              const strokeDasharray = circumference;
+              const strokeDashoffset = circumference - (percentage / 100) * circumference;
+              const rotation = (cumulativePercentage / 100) * 360;
+              
               cumulativePercentage += percentage;
               
               return (
-                <path
+                <circle
                   key={index}
-                  d={path}
-                  fill={item.color}
-                  className={`transition-all duration-1000 ease-out ${animated ? 'opacity-100' : 'opacity-0'}`}
+                  cx={size / 2}
+                  cy={size / 2}
+                  r={radius}
+                  fill="transparent"
+                  stroke={item.color}
+                  strokeWidth="30"
+                  strokeDasharray={strokeDasharray}
+                  strokeDashoffset={animated ? strokeDashoffset : circumference}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000 ease-out"
                   style={{
-                    filter: `drop-shadow(0 0 8px ${item.color}40)`
+                    transformOrigin: `${size / 2}px ${size / 2}px`,
+                    transform: `rotate(${rotation}deg)`
                   }}
                 />
               );
@@ -606,10 +565,10 @@ const AnimatedPieChart = ({ data, title }: {
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="text-2xl font-bold text-white">
-                R$ {total.toLocaleString('pt-BR')}
+              <div className="text-xl font-bold text-gray-900">
+                R$ {(total / 1000).toFixed(0)}K
               </div>
-              <div className="text-xs text-gray-400">Total</div>
+              <div className="text-xs text-gray-500">Total</div>
             </div>
           </div>
         </div>
@@ -619,13 +578,13 @@ const AnimatedPieChart = ({ data, title }: {
           <div key={index} className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div 
-                className="w-4 h-4 rounded-full"
+                className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: item.color }}
               />
-              <span className="text-gray-300">{item.label}</span>
+              <span className="text-gray-700 text-sm">{item.label}</span>
             </div>
-            <div className="text-white font-bold">
-              R$ {item.value.toLocaleString('pt-BR')}
+            <div className="text-gray-900 font-semibold text-sm">
+              R$ {(item.value / 1000).toFixed(0)}K
             </div>
           </div>
         ))}
@@ -634,7 +593,7 @@ const AnimatedPieChart = ({ data, title }: {
   );
 };
 
-// Componente de Indicadores com Ícones
+// Componente de Indicador
 const IndicatorCard = ({ 
   icon: Icon, 
   title, 
@@ -650,17 +609,17 @@ const IndicatorCard = ({
 }) => {
   const getStatusColor = () => {
     switch (status) {
-      case 'success': return 'text-green-400 bg-green-900/30 border-green-600';
-      case 'warning': return 'text-yellow-400 bg-yellow-900/30 border-yellow-600';
-      case 'error': return 'text-red-400 bg-red-900/30 border-red-600';
+      case 'success': return 'text-green-600 bg-green-50 border-green-200';
+      case 'warning': return 'text-amber-600 bg-amber-50 border-amber-200';
+      case 'error': return 'text-red-600 bg-red-50 border-red-200';
     }
   };
 
   const getStatusIcon = () => {
     switch (status) {
-      case 'success': return <CheckCircle size={20} />;
-      case 'warning': return <AlertTriangle size={20} />;
-      case 'error': return <XCircle size={20} />;
+      case 'success': return <CheckCircle size={20} className="text-green-600" />;
+      case 'warning': return <AlertTriangle size={20} className="text-amber-600" />;
+      case 'error': return <XCircle size={20} className="text-red-600" />;
     }
   };
 
@@ -671,69 +630,86 @@ const IndicatorCard = ({
           <Icon size={24} />
         </div>
         <div className="flex-1">
-          <h3 className="text-lg font-bold text-white">{title}</h3>
-          <p className="text-gray-300 text-sm">{description}</p>
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <p className="text-gray-600 text-sm">{description}</p>
         </div>
         {getStatusIcon()}
       </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="text-2xl font-bold text-gray-900">{value}</div>
     </div>
   );
 };
 
-// Componente principal do relatório
-const CreditScoreReport = ({ result, onBack }: { result: CreditAnalysisResult; onBack: () => void }) => {
-  const [activeTab, setActiveTab] = useState('overview');
+// Função para extrair valores numéricos das strings
+const parseFinancialValue = (value: string): number => {
+  if (!value) return 0;
+  
+  // Remove R$, pontos, vírgulas e espaços, mantém apenas números
+  const numericString = value.replace(/[R$\s.]/g, '').replace(',', '.');
+  const number = parseFloat(numericString);
+  
+  return isNaN(number) ? 0 : number;
+};
 
-  // Dados simulados para os gráficos
+// Componente principal do dashboard
+const CreditScoreDashboard = ({ result, onBack }: { result: CreditAnalysisResult; onBack: () => void }) => {
+  // Parse dos dados financeiros
+  const receitaAnual = parseFinancialValue(result.indicadores_financeiros?.receita_anual_estimativa || '0');
+  const lucroLiquido = parseFinancialValue(result.indicadores_financeiros?.lucro_liquido_estimado || '0');
+  const dividaBancaria = parseFinancialValue(result.indicadores_financeiros?.divida_bancaria_estimativa || '0');
+  const valorParcela = parseFinancialValue(result.valor_parcela || '0');
+  const entradaSugerida = parseFinancialValue(result.entrada_sugerida || '0');
+
+  // Dados para os gráficos donut
   const fluxoCaixaData = [
-    { label: 'Receita Operacional', value: 2500000, color: 'bg-gradient-to-r from-green-500 to-green-600' },
-    { label: 'Custos Operacionais', value: 1800000, color: 'bg-gradient-to-r from-blue-500 to-blue-600' },
-    { label: 'Lucro Líquido', value: 700000, color: 'bg-gradient-to-r from-purple-500 to-purple-600' },
+    { label: 'Receita Anual', value: receitaAnual, color: '#059669' },
+    { label: 'Lucro Líquido', value: lucroLiquido, color: '#2563EB' },
+    { label: 'Dívidas', value: dividaBancaria, color: '#DC2626' },
   ];
 
-  const endividamentoData = [
-    { label: 'Faturamento Mensal', value: 208333, color: '#10B981' },
-    { label: 'Dívidas Atuais', value: 85000, color: '#F59E0B' },
-    { label: 'Novo Crédito', value: 50000, color: '#EF4444' },
-  ];
-
-  const capacidadeData = [
-    { label: 'Capacidade Total', value: 150000, color: '#3B82F6' },
-    { label: 'Comprometimento Atual', value: 85000, color: '#F59E0B' },
-    { label: 'Margem Disponível', value: 65000, color: '#10B981' },
+  const financiamentoData = [
+    { label: 'Entrada', value: entradaSugerida, color: '#059669' },
+    { label: 'Financiado', value: valorParcela * result.numero_parcelas, color: '#2563EB' },
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-black/20 backdrop-blur-sm border-b border-white/10">
+      <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center py-6">
-            <button
-              onClick={onBack}
-              className="text-white hover:text-blue-200 transition-colors mr-4"
-            >
-              <ArrowLeft size={24} />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                <Shield className="text-white" size={24} />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">Relatório de Credit Score</h1>
-                <p className="text-blue-200">{result.indicadores_cadastrais.razao_social}</p>
+          <div className="flex items-center justify-between py-6">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={onBack}
+                className="text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <ArrowLeft size={24} />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <Shield className="text-white" size={24} />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Relatório de Credit Score</h1>
+                  <p className="text-gray-600">{result.indicadores_cadastrais?.razao_social || 'N/A'}</p>
+                </div>
               </div>
             </div>
+            <button
+              onClick={onBack}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+            >
+              Nova Análise
+            </button>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Card Superior Reformulado */}
-        <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-2xl p-8 mb-8 border border-blue-600/50 shadow-2xl">
+        {/* Score Principal */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 mb-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
-            {/* Score Principal */}
+            {/* Score Gauge */}
             <div className="text-center">
               <AnimatedGauge score={result.score} size={220} />
             </div>
@@ -741,56 +717,56 @@ const CreditScoreReport = ({ result, onBack }: { result: CreditAnalysisResult; o
             {/* Informações da Empresa */}
             <div className="lg:col-span-2 space-y-6">
               <div>
-                <h2 className="text-3xl font-bold text-white mb-2">{result.indicadores_cadastrais.razao_social}</h2>
-                <p className="text-blue-200 text-lg">{result.classificacao}</p>
-                <p className="text-blue-100 mt-2">{result.motivo}</p>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">{result.indicadores_cadastrais?.razao_social || 'N/A'}</h2>
+                <p className="text-blue-600 text-lg font-medium">{result.classificacao}</p>
+                <p className="text-gray-600 mt-2">{result.motivo}</p>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <Building2 className="text-blue-300" size={20} />
+                    <Building2 className="text-gray-500" size={20} />
                     <div>
-                      <p className="text-blue-200 text-sm">CNPJ</p>
-                      <p className="text-white font-medium">{result.indicadores_cadastrais.cnpj}</p>
+                      <p className="text-gray-500 text-sm">CNPJ</p>
+                      <p className="text-gray-900 font-medium">{result.indicadores_cadastrais?.cnpj || 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Calendar className="text-blue-300" size={20} />
+                    <Calendar className="text-gray-500" size={20} />
                     <div>
-                      <p className="text-blue-200 text-sm">Data de Abertura</p>
-                      <p className="text-white font-medium">{result.indicadores_cadastrais.data_abertura}</p>
+                      <p className="text-gray-500 text-sm">Data de Abertura</p>
+                      <p className="text-gray-900 font-medium">{result.indicadores_cadastrais?.data_abertura || 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Users className="text-blue-300" size={20} />
+                    <Users className="text-gray-500" size={20} />
                     <div>
-                      <p className="text-blue-200 text-sm">Porte</p>
-                      <p className="text-white font-medium">{result.indicadores_cadastrais.porte}</p>
+                      <p className="text-gray-500 text-sm">Porte</p>
+                      <p className="text-gray-900 font-medium">{result.indicadores_cadastrais?.porte || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
                 
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <MapPin className="text-blue-300" size={20} />
+                    <MapPin className="text-gray-500" size={20} />
                     <div>
-                      <p className="text-blue-200 text-sm">Localização</p>
-                      <p className="text-white font-medium">{result.indicadores_cadastrais.municipio}/{result.indicadores_cadastrais.estado}</p>
+                      <p className="text-gray-500 text-sm">Localização</p>
+                      <p className="text-gray-900 font-medium">{result.indicadores_cadastrais?.municipio || 'N/A'}/{result.indicadores_cadastrais?.estado || 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Activity className="text-blue-300" size={20} />
+                    <Activity className="text-gray-500" size={20} />
                     <div>
-                      <p className="text-blue-200 text-sm">Situação</p>
-                      <p className="text-white font-medium">{result.indicadores_cadastrais.situacao_cadastral}</p>
+                      <p className="text-gray-500 text-sm">Situação</p>
+                      <p className="text-gray-900 font-medium">{result.indicadores_cadastrais?.situacao_cadastral || 'N/A'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <DollarSign className="text-blue-300" size={20} />
+                    <DollarSign className="text-gray-500" size={20} />
                     <div>
-                      <p className="text-blue-200 text-sm">Capital Social</p>
-                      <p className="text-white font-medium">{result.indicadores_cadastrais.capital_social}</p>
+                      <p className="text-gray-500 text-sm">Capital Social</p>
+                      <p className="text-gray-900 font-medium">{result.indicadores_cadastrais?.capital_social || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
@@ -799,242 +775,116 @@ const CreditScoreReport = ({ result, onBack }: { result: CreditAnalysisResult; o
           </div>
         </div>
 
-        {/* Navegação por Tabs */}
-        <div className="flex flex-wrap gap-2 mb-8">
-          {[
-            { id: 'overview', label: 'Visão Geral', icon: Target },
-            { id: 'financing', label: 'Simulação de Financiamento', icon: DollarSign },
-            { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
-            { id: 'analysis', label: 'Análise Comparativa', icon: PieChart },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'bg-white/10 text-blue-200 hover:bg-white/20'
-              }`}
-            >
-              <tab.icon size={20} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Conteúdo das Tabs */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <IndicatorCard
-              icon={TrendingUp}
-              title="Rentabilidade"
-              value="Positiva"
-              status="success"
-              description="Empresa apresenta boa capacidade de geração de lucro"
-            />
-            <IndicatorCard
-              icon={AlertTriangle}
-              title="Endividamento"
-              value="Moderado"
-              status="warning"
-              description="Nível de endividamento dentro dos parâmetros aceitáveis"
-            />
-            <IndicatorCard
-              icon={XCircle}
-              title="Capacidade"
-              value="Limitada"
-              status="error"
-              description="Capacidade de pagamento comprometida com novo crédito"
-            />
-          </div>
-        )}
-
-        {activeTab === 'financing' && (
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-            <h3 className="text-2xl font-bold text-white mb-8 text-center">Simulação de Financiamento</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl p-6 text-center">
-                <DollarSign className="mx-auto mb-3 text-white" size={32} />
-                <h4 className="text-white font-bold text-lg mb-2">Entrada Sugerida</h4>
-                <p className="text-green-100 text-2xl font-bold">{result.entrada_sugerida}</p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-6 text-center">
-                <Calendar className="mx-auto mb-3 text-white" size={32} />
-                <h4 className="text-white font-bold text-lg mb-2">Parcelas</h4>
-                <p className="text-blue-100 text-2xl font-bold">{result.numero_parcelas}x</p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6 text-center">
-                <TrendingUp className="mx-auto mb-3 text-white" size={32} />
-                <h4 className="text-white font-bold text-lg mb-2">Valor da Parcela</h4>
-                <p className="text-purple-100 text-2xl font-bold">{result.valor_parcela}</p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-6 text-center">
-                <Activity className="mx-auto mb-3 text-white" size={32} />
-                <h4 className="text-white font-bold text-lg mb-2">Taxa Mensal</h4>
-                <p className="text-orange-100 text-2xl font-bold">{result.juros_mensal}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'cashflow' && (
-          <div className="space-y-8">
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-              <h3 className="text-2xl font-bold text-white mb-8 text-center">Fluxo de Caixa Projetado (Anual)</h3>
-              <AnimatedBarChart data={fluxoCaixaData} />
+        {/* Simulação de Financiamento */}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 mb-8">
+          <h3 className="text-2xl font-bold text-gray-900 mb-8 text-center">Simulação de Financiamento</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+              <DollarSign className="mx-auto mb-3 text-green-600" size={32} />
+              <h4 className="text-gray-900 font-semibold text-lg mb-2">Entrada Sugerida</h4>
+              <p className="text-green-600 text-2xl font-bold">{result.entrada_sugerida}</p>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <AnimatedPieChart 
-                data={endividamentoData} 
-                title="Impacto do Crédito no Endividamento Mensal"
-              />
-              <AnimatedPieChart 
-                data={capacidadeData} 
-                title="Capacidade de Pagamento"
-              />
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
+              <Calculator className="mx-auto mb-3 text-blue-600" size={32} />
+              <h4 className="text-gray-900 font-semibold text-lg mb-2">Parcelas</h4>
+              <p className="text-blue-600 text-2xl font-bold">{result.numero_parcelas}x</p>
+            </div>
+            
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 text-center">
+              <CreditCard className="mx-auto mb-3 text-purple-600" size={32} />
+              <h4 className="text-gray-900 font-semibold text-lg mb-2">Valor da Parcela</h4>
+              <p className="text-purple-600 text-2xl font-bold">{result.valor_parcela}</p>
+            </div>
+            
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 text-center">
+              <Percent className="mx-auto mb-3 text-orange-600" size={32} />
+              <h4 className="text-gray-900 font-semibold text-lg mb-2">Taxa Mensal</h4>
+              <p className="text-orange-600 text-2xl font-bold">{result.juros_mensal}</p>
             </div>
           </div>
-        )}
+        </div>
 
-        {activeTab === 'analysis' && (
-          <div className="space-y-8">
-            {/* Gráfico Comparativo dos Indicadores */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-              <h3 className="text-2xl font-bold text-white mb-8 text-center">Análise Comparativa de Indicadores</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Rentabilidade */}
-                <div className="text-center">
-                  <div className="relative w-32 h-32 mx-auto mb-4">
-                    <svg className="w-32 h-32 transform -rotate-90">
-                      <circle cx="64" cy="64" r="56" stroke="#374151" strokeWidth="8" fill="transparent" />
-                      <circle 
-                        cx="64" 
-                        cy="64" 
-                        r="56" 
-                        stroke="#10B981" 
-                        strokeWidth="8" 
-                        fill="transparent"
-                        strokeDasharray={351.86}
-                        strokeDashoffset={87.97}
-                        strokeLinecap="round"
-                        className="transition-all duration-2000 ease-out"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <CheckCircle className="text-green-400" size={32} />
-                    </div>
-                  </div>
-                  <h4 className="text-white font-bold text-lg">Rentabilidade</h4>
-                  <p className="text-green-400 font-medium">75% Positiva</p>
-                </div>
+        {/* Indicadores de Risco */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <IndicatorCard
+            icon={TrendingUp}
+            title="Rentabilidade"
+            value="Positiva"
+            status="success"
+            description="Empresa apresenta boa capacidade de geração de lucro"
+          />
+          <IndicatorCard
+            icon={AlertTriangle}
+            title="Endividamento"
+            value="Moderado"
+            status="warning"
+            description="Nível de endividamento dentro dos parâmetros aceitáveis"
+          />
+          <IndicatorCard
+            icon={Shield}
+            title="Capacidade"
+            value="Adequada"
+            status="success"
+            description="Capacidade de pagamento compatível com o crédito solicitado"
+          />
+        </div>
 
-                {/* Endividamento */}
-                <div className="text-center">
-                  <div className="relative w-32 h-32 mx-auto mb-4">
-                    <svg className="w-32 h-32 transform -rotate-90">
-                      <circle cx="64" cy="64" r="56" stroke="#374151" strokeWidth="8" fill="transparent" />
-                      <circle 
-                        cx="64" 
-                        cy="64" 
-                        r="56" 
-                        stroke="#F59E0B" 
-                        strokeWidth="8" 
-                        fill="transparent"
-                        strokeDasharray={351.86}
-                        strokeDashoffset={140.74}
-                        strokeLinecap="round"
-                        className="transition-all duration-2000 ease-out"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <AlertTriangle className="text-yellow-400" size={32} />
-                    </div>
-                  </div>
-                  <h4 className="text-white font-bold text-lg">Endividamento</h4>
-                  <p className="text-yellow-400 font-medium">60% Moderado</p>
-                </div>
+        {/* Gráficos Donut */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <DonutChart 
+            data={fluxoCaixaData} 
+            title="Situação Financeira Atual"
+          />
+          <DonutChart 
+            data={financiamentoData} 
+            title="Estrutura do Financiamento"
+          />
+        </div>
 
-                {/* Capacidade */}
-                <div className="text-center">
-                  <div className="relative w-32 h-32 mx-auto mb-4">
-                    <svg className="w-32 h-32 transform -rotate-90">
-                      <circle cx="64" cy="64" r="56" stroke="#374151" strokeWidth="8" fill="transparent" />
-                      <circle 
-                        cx="64" 
-                        cy="64" 
-                        r="56" 
-                        stroke="#EF4444" 
-                        strokeWidth="8" 
-                        fill="transparent"
-                        strokeDasharray={351.86}
-                        strokeDashoffset={246.30}
-                        strokeLinecap="round"
-                        className="transition-all duration-2000 ease-out"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <XCircle className="text-red-400" size={32} />
-                    </div>
-                  </div>
-                  <h4 className="text-white font-bold text-lg">Capacidade</h4>
-                  <p className="text-red-400 font-medium">30% Limitada</p>
-                </div>
+        {/* Informações Detalhadas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+              <BarChart3 className="text-blue-600" size={24} />
+              Indicadores Financeiros
+            </h4>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                <span className="text-gray-700">Receita Anual Estimada</span>
+                <span className="text-gray-900 font-semibold">{result.indicadores_financeiros?.receita_anual_estimativa || 'N/A'}</span>
               </div>
-            </div>
-
-            {/* Informações Financeiras e Operacionais */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-                <h4 className="text-xl font-bold text-white mb-6">Indicadores Financeiros</h4>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-gray-800/50 rounded-lg">
-                    <span className="text-gray-300">Receita Anual Estimada</span>
-                    <span className="text-white font-bold">{result.indicadores_financeiros.receita_anual_estimativa}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-4 bg-gray-800/50 rounded-lg">
-                    <span className="text-gray-300">Lucro Líquido Estimado</span>
-                    <span className="text-white font-bold">{result.indicadores_financeiros.lucro_liquido_estimado}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-4 bg-gray-800/50 rounded-lg">
-                    <span className="text-gray-300">Dívida Bancária Estimada</span>
-                    <span className="text-white font-bold">{result.indicadores_financeiros.divida_bancaria_estimativa}</span>
-                  </div>
-                </div>
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                <span className="text-gray-700">Lucro Líquido Estimado</span>
+                <span className="text-gray-900 font-semibold">{result.indicadores_financeiros?.lucro_liquido_estimado || 'N/A'}</span>
               </div>
-
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-                <h4 className="text-xl font-bold text-white mb-6">Performance Operacional</h4>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-gray-800/50 rounded-lg">
-                    <span className="text-gray-300">Obras Entregues (Último Ano)</span>
-                    <span className="text-white font-bold">{result.indicadores_operacionais.obras_entregues_ultimo_ano}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-4 bg-gray-800/50 rounded-lg">
-                    <span className="text-gray-300">Especialização</span>
-                    <span className="text-white font-bold">{result.indicadores_operacionais.tipo_principal_de_obra}</span>
-                  </div>
-                  <div className="flex justify-between items-center p-4 bg-gray-800/50 rounded-lg">
-                    <span className="text-gray-300">Região de Atuação</span>
-                    <span className="text-white font-bold">{result.indicadores_operacionais.regiao_de_atuacao}</span>
-                  </div>
-                </div>
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                <span className="text-gray-700">Dívida Bancária Estimada</span>
+                <span className="text-gray-900 font-semibold">{result.indicadores_financeiros?.divida_bancaria_estimativa || 'N/A'}</span>
               </div>
             </div>
           </div>
-        )}
 
-        {/* Botão de Nova Análise */}
-        <div className="text-center mt-12">
-          <button
-            onClick={onBack}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
-          >
-            Nova Análise
-          </button>
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+              <Target className="text-green-600" size={24} />
+              Performance Operacional
+            </h4>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                <span className="text-gray-700">Obras Entregues (Último Ano)</span>
+                <span className="text-gray-900 font-semibold">{result.indicadores_operacionais?.obras_entregues_ultimo_ano || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                <span className="text-gray-700">Especialização</span>
+                <span className="text-gray-900 font-semibold">{result.indicadores_operacionais?.tipo_principal_de_obra || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                <span className="text-gray-700">Região de Atuação</span>
+                <span className="text-gray-900 font-semibold">{result.indicadores_operacionais?.regiao_de_atuacao || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
