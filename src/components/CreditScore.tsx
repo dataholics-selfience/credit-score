@@ -26,6 +26,7 @@ import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addDoc, collection } from 'firebase/firestore';
 import { extractPDFData, validateFinancialPDF, formatExtractedDataForWebhook } from '../utils/pdfExtractor';
+import { uploadMultipleFiles, validateFile, getStorageErrorMessage, DEFAULT_UPLOAD_CONFIG } from '../utils/storageUtils';
 
 interface CreditAnalysisResult {
   score: number;
@@ -82,6 +83,7 @@ const CreditScore = () => {
     message: '',
     progress: 0
   });
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
 
   useEffect(() => {
     // Generate session ID on component mount
@@ -127,19 +129,18 @@ const CreditScore = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length > 0) {
-      // Validate file types
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-      const invalidFiles = selectedFiles.filter(file => !allowedTypes.includes(file.type));
+      // Validar cada arquivo
+      const validationErrors: string[] = [];
       
-      if (invalidFiles.length > 0) {
-        setError('Por favor, selecione apenas arquivos PDF ou imagem (JPG, PNG)');
-        return;
-      }
+      selectedFiles.forEach((file, index) => {
+        const validation = validateFile(file, DEFAULT_UPLOAD_CONFIG);
+        if (!validation.isValid) {
+          validationErrors.push(`Arquivo ${index + 1} (${file.name}): ${validation.error}`);
+        }
+      });
       
-      // Validate file sizes (max 10MB each)
-      const oversizedFiles = selectedFiles.filter(file => file.size > 10 * 1024 * 1024);
-      if (oversizedFiles.length > 0) {
-        setError('Cada arquivo deve ter no máximo 10MB');
+      if (validationErrors.length > 0) {
+        setError(validationErrors.join('\n'));
         return;
       }
       
@@ -163,6 +164,7 @@ const CreditScore = () => {
     setUploading(true);
     setError('');
     setExtractionStatus({ stage: 'idle', message: '', progress: 0 });
+    setUploadProgress({});
 
     try {
       const fileUrls: string[] = [];
@@ -196,12 +198,25 @@ const CreditScore = () => {
         
         updateExtractionStatus('analyzing', 'Fazendo upload dos arquivos...', 75);
         
-        for (const file of files) {
-          const storageRef = ref(storage, `credit-score/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
-          const snapshot = await uploadBytes(storageRef, file);
-          const downloadURL = await getDownloadURL(snapshot.ref);
-          fileUrls.push(downloadURL);
-        }
+        // Upload múltiplos arquivos com progresso
+        const basePath = `credit-score/${auth.currentUser.uid}`;
+        
+        const uploadedUrls = await uploadMultipleFiles(
+          files,
+          basePath,
+          DEFAULT_UPLOAD_CONFIG,
+          (fileIndex, progress) => {
+            setUploadProgress(prev => ({
+              ...prev,
+              [`file-${fileIndex}`]: progress
+            }));
+          },
+          (overallProgress) => {
+            updateExtractionStatus('analyzing', `Enviando arquivos... ${overallProgress}%`, 75 + (overallProgress * 0.15));
+          }
+        );
+        
+        fileUrls.push(...uploadedUrls);
       } else {
         updateExtractionStatus('analyzing', 'Preparando análise básica...', 75);
       }
@@ -269,8 +284,12 @@ const CreditScore = () => {
 
     } catch (error) {
       console.error('Error uploading files:', error);
-      setError(`Erro ao processar a análise: ${error instanceof Error ? error.message : 'Erro desconhecido'}. Tente novamente.`);
+      
+      const errorMessage = getStorageErrorMessage(error as Error);
+      
+      setError(`Erro ao processar a análise: ${errorMessage}`);
       updateExtractionStatus('idle', '', 0);
+      setUploadProgress({});
     } finally {
       setUploading(false);
       if (extractionStatus.stage === 'complete') {
@@ -514,14 +533,15 @@ const CreditScore = () => {
             
             {files.length === 0 && (
               <p className="text-blue-200 text-sm mt-4">
-                Análise baseada apenas nos dados informados no formulário
+                💡 <strong>Dica:</strong> Para melhor performance, use arquivos de até 5MB. 
+                A análise pode ser feita apenas com os dados do formulário se preferir.
               </p>
             )}
             
             {files.length > 0 && (
               <div className="mt-4 p-3 bg-green-900/20 border border-green-600 rounded-lg">
                 <p className="text-green-200 text-sm">
-                  💡 <strong>Análise Avançada:</strong> Os PDFs serão processados automaticamente para extrair dados financeiros e enriquecer a análise de crédito.
+                  💡 <strong>Análise Avançada:</strong> Os arquivos serão enviados com retry automático em caso de falha de conexão.
                 </p>
               </div>
             )}

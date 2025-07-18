@@ -11,6 +11,7 @@ import {
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addDoc, collection } from 'firebase/firestore';
+import { uploadFileWithRetry, validateFile, getStorageErrorMessage, DEFAULT_UPLOAD_CONFIG } from '../utils/storageUtils';
 
 const RendaPresumida = () => {
   const navigate = useNavigate();
@@ -23,16 +24,9 @@ const RendaPresumida = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Validate file type
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-      if (!allowedTypes.includes(selectedFile.type)) {
-        setError('Por favor, selecione um arquivo PDF ou imagem (JPG, PNG)');
-        return;
-      }
-      
-      // Validate file size (max 10MB)
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        setError('O arquivo deve ter no máximo 10MB');
+      const validation = validateFile(selectedFile, DEFAULT_UPLOAD_CONFIG);
+      if (!validation.isValid) {
+        setError(validation.error || 'Arquivo inválido');
         return;
       }
       
@@ -48,10 +42,9 @@ const RendaPresumida = () => {
     setError('');
 
     try {
-      // Upload file to Firebase Storage
-      const storageRef = ref(storage, `holerites/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      // Upload file to Firebase Storage com retry
+      const filePath = `holerites/${auth.currentUser.uid}/${Date.now()}_${file.name}`;
+      const downloadURL = await uploadFileWithRetry(file, filePath);
 
       // Save to Firestore
       const docRef = await addDoc(collection(db, 'rendaPresumida'), {
@@ -93,7 +86,10 @@ const RendaPresumida = () => {
 
     } catch (error) {
       console.error('Error uploading file:', error);
-      setError('Erro ao fazer upload do arquivo. Tente novamente.');
+      
+      const errorMessage = getStorageErrorMessage(error as Error);
+      
+      setError(`Erro ao fazer upload: ${errorMessage}`);
     } finally {
       setUploading(false);
     }
@@ -159,7 +155,7 @@ const RendaPresumida = () => {
                 {file ? file.name : 'Clique ou arraste seu holerite aqui'}
               </h3>
               <p className="text-blue-200 mb-4">
-                Formatos aceitos: PDF, JPG, PNG (máx. 10MB)
+                Formatos aceitos: PDF, JPG, PNG (máx. 5MB)
               </p>
               
               <input
