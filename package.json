@@ -13,7 +13,6 @@
     "date-fns": "^3.3.1",
     "firebase": "^10.14.1",
     "lucide-react": "^0.344.0",
-    "pdfplumber": "^0.0.1-security",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.22.1",
