@@ -25,6 +25,7 @@ import {
 import { auth, db, storage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addDoc, collection } from 'firebase/firestore';
+import { extractPDFData, validateFinancialPDF, formatExtractedDataForWebhook } from '../utils/pdfExtractor';
 
 interface CreditAnalysisResult {
   score: number;
@@ -72,6 +73,15 @@ const CreditScore = () => {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<CreditAnalysisResult | null>(null);
   const [error, setError] = useState('');
+  const [extractionStatus, setExtractionStatus] = useState<{
+    stage: 'idle' | 'extracting' | 'structuring' | 'analyzing' | 'complete';
+    message: string;
+    progress: number;
+  }>({
+    stage: 'idle',
+    message: '',
+    progress: 0
+  });
 
   useEffect(() => {
     // Generate session ID on component mount
@@ -138,6 +148,10 @@ const CreditScore = () => {
     }
   };
 
+  const updateExtractionStatus = (stage: typeof extractionStatus.stage, message: string, progress: number) => {
+    setExtractionStatus({ stage, message, progress });
+  };
+
   const handleUpload = async () => {
     if (!auth.currentUser) return;
     
@@ -148,19 +162,51 @@ const CreditScore = () => {
 
     setUploading(true);
     setError('');
+    setExtractionStatus({ stage: 'idle', message: '', progress: 0 });
 
     try {
       const fileUrls: string[] = [];
+      let extractedPDFData: any = null;
       
       // Upload files to Firebase Storage (if any)
       if (files.length > 0) {
+        updateExtractionStatus('extracting', 'Extraindo dados do PDF...', 20);
+        
+        // Extract data from PDF files
+        for (const file of files) {
+          if (file.type === 'application/pdf') {
+            try {
+              const pdfData = await extractPDFData(file);
+              updateExtractionStatus('structuring', 'Estruturando dados do PDF...', 50);
+              
+              const validation = validateFinancialPDF(pdfData);
+              if (!validation.isValid) {
+                console.warn('PDF validation warnings:', validation.warnings);
+                console.error('PDF validation errors:', validation.errors);
+              }
+              
+              extractedPDFData = formatExtractedDataForWebhook(pdfData);
+              updateExtractionStatus('analyzing', 'Dados estruturados com sucesso...', 70);
+            } catch (pdfError) {
+              console.error('Error extracting PDF data:', pdfError);
+              setError('Erro ao extrair dados do PDF. O arquivo será enviado para análise manual.');
+            }
+          }
+        }
+        
+        updateExtractionStatus('analyzing', 'Fazendo upload dos arquivos...', 75);
+        
         for (const file of files) {
           const storageRef = ref(storage, `credit-score/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
           const snapshot = await uploadBytes(storageRef, file);
           const downloadURL = await getDownloadURL(snapshot.ref);
           fileUrls.push(downloadURL);
         }
+      } else {
+        updateExtractionStatus('analyzing', 'Preparando análise básica...', 75);
       }
+
+      updateExtractionStatus('analyzing', 'Salvando análise de crédito...', 90);
 
       // Save to Firestore
       const docRef = await addDoc(collection(db, 'creditScore'), {
@@ -175,8 +221,11 @@ const CreditScore = () => {
         fileNames: files.length > 0 ? files.map(f => f.name) : [],
         hasDocuments: files.length > 0,
         uploadedAt: new Date().toISOString(),
-        status: 'processing'
+        status: 'processing',
+        extractedPDFData
       });
+
+      updateExtractionStatus('analyzing', 'Enviando para análise de crédito...', 95);
 
       // Send to webhook
       const webhookData = {
@@ -191,8 +240,11 @@ const CreditScore = () => {
         sessionId: formData.sessionId,
         fileUrls,
         hasDocuments: files.length > 0,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        extractedPDFData
       };
+
+      console.log('Enviando dados para webhook:', webhookData);
 
       const response = await fetch('https://primary-production-2e3b.up.railway.app/webhook/credit-score', {
         method: 'POST',
@@ -202,18 +254,28 @@ const CreditScore = () => {
         body: JSON.stringify(webhookData),
       });
 
+      console.log('Resposta do webhook:', response.status, response.statusText);
+
       if (response.ok) {
         const result = await response.json();
+        console.log('Resultado recebido:', result);
         setResult(result);
+        updateExtractionStatus('complete', 'Análise concluída!', 100);
       } else {
+        const errorText = await response.text();
+        console.error('Erro na resposta do webhook:', errorText);
         throw new Error('Erro ao processar os arquivos');
       }
 
     } catch (error) {
       console.error('Error uploading files:', error);
-      setError('Erro ao fazer upload dos arquivos. Tente novamente.');
+      setError(`Erro ao processar a análise: ${error instanceof Error ? error.message : 'Erro desconhecido'}. Tente novamente.`);
+      updateExtractionStatus('idle', '', 0);
     } finally {
       setUploading(false);
+      if (extractionStatus.stage === 'complete') {
+        setTimeout(() => setExtractionStatus({ stage: 'idle', message: '', progress: 0 }), 3000);
+      }
     }
   };
 
@@ -396,6 +458,25 @@ const CreditScore = () => {
             )}
           </div>
 
+          {/* PDF Extraction Status */}
+          {extractionStatus.stage !== 'idle' && (
+            <div className="mt-6 p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-blue-200 font-medium">{extractionStatus.message}</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${extractionStatus.progress}%` }}
+                />
+              </div>
+              <div className="text-blue-300 text-sm mt-2">
+                {extractionStatus.progress}% concluído
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="mb-6 p-4 bg-red-900/30 border border-red-600 rounded-lg">
               <div className="flex items-center gap-2">
@@ -419,7 +500,12 @@ const CreditScore = () => {
               {uploading ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="animate-spin" size={20} />
-                  {files.length > 0 ? 'Analisando documentos e dados...' : 'Analisando dados da empresa...'}
+                  {extractionStatus.stage !== 'idle' 
+                    ? extractionStatus.message 
+                    : files.length > 0 
+                      ? 'Analisando documentos e dados...' 
+                      : 'Analisando dados da empresa...'
+                  }
                 </div>
               ) : (
                 files.length > 0 ? 'Analisar Credit Score Completo' : 'Analisar Credit Score Básico'
@@ -430,6 +516,14 @@ const CreditScore = () => {
               <p className="text-blue-200 text-sm mt-4">
                 Análise baseada apenas nos dados informados no formulário
               </p>
+            )}
+            
+            {files.length > 0 && (
+              <div className="mt-4 p-3 bg-green-900/20 border border-green-600 rounded-lg">
+                <p className="text-green-200 text-sm">
+                  💡 <strong>Análise Avançada:</strong> Os PDFs serão processados automaticamente para extrair dados financeiros e enriquecer a análise de crédito.
+                </p>
+              </div>
             )}
           </div>
         </div>
